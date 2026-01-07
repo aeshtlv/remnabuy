@@ -1,235 +1,75 @@
-# RemnaBuy - Remnawave Subscription Purchase Bot
-**Available languages:** [Русский](README.md)
+# RemnaBuy — Remnawave Telegram Bot (subscriptions + admin panel)
 
-Telegram bot for purchasing and managing Remnawave VPN subscriptions. Supports payment via Telegram Stars, promo codes, referral program, and trial subscriptions. Also includes full admin panel for managing users, nodes, and billing.
+**Languages:** [Русский](README.md)
+
+RemnaBuy turns your Remnawave panel into a **user‑facing storefront**: a user purchases a subscription → receives a config link, while admins keep full control of Remnawave from the bot.
 
 ## Features
 
-- **User Management**: View, create, edit users, manage subscriptions, bulk operations
-- **Node Management**: Monitor nodes, enable/disable, restart, reset traffic, assign profiles
-- **Host Management**: Manage hosts, bulk operations
-- **Templates**: Create and manage subscription templates
-- **Snippets**: Manage configuration snippets
-- **API Tokens**: Manage API access tokens
-- **Billing**: Track billing history, manage providers and billing nodes
-- **Statistics**: Panel and server statistics with detailed metrics
-- **Multi-language**: Russian and English support
+- **User‑facing**:
+  - Subscription purchase via **Telegram Stars** (1 / 3 / 6 / 12 months)
+  - Trial subscription (manual activation button)
+  - Promo codes (discount/bonus days)
+  - Referral program
+  - “My subscription”: status, expiry, traffic, config link
+  - RU/EN UI
+- **Admin**:
+  - Users / nodes / hosts management
+  - Resources (templates/snippets/tokens)
+  - Billing & statistics
 
-## Quick Start
+## Quick start (Docker)
 
-### Prerequisites
+### Requirements
 
-- Python 3.12+ (for local development)
-- Docker and Docker Compose (for deployment)
+- Docker + Docker Compose
 - Telegram Bot Token from [@BotFather](https://t.me/BotFather)
-- Remnawave API access token
+- Remnawave API access (`API_BASE_URL`, `API_TOKEN`)
 
-### Installation
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/aeshtlv/remnabuy.git
-   ```
-   ```bash
-   cd remnabuy
-   ```
-
-2. **Copy environment file:**
-   ```bash
-   cp .env.example .env
-   ```
-
-3. **Edit `.env` file:**
-   ```bash
-   nano .env
-   ```
-
-   Required variables:
-   ```env
-   BOT_TOKEN=your_telegram_bot_token
-   API_BASE_URL=http://remnawave:3000
-   API_TOKEN=your_api_token
-   ADMINS=123456789,987654321
-   DEFAULT_LOCALE=ru
-   LOG_LEVEL=INFO
-   ```
-
-   **For Docker deployment**, use:
-   - `API_BASE_URL=http://remnawave:3000` (if bot is in the same Docker network)
-   - `API_BASE_URL=https://your-panel-domain.com/api` (if bot is external)
-
-4. **Deploy with Docker Compose:**
-   ```bash
-   docker compose pull
-   docker compose up -d
-   ```
-
-5. **Check logs:**
-   ```bash
-   docker compose logs -f bot
-   ```
-
-## Local Development
-
-1. **Create virtual environment:**
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # Linux/Mac
-   # or
-   .venv\Scripts\activate  # Windows
-   ```
-
-2. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Set up environment:**
-   ```bash
-   cp .env.example .env
-   nano .env
-   ```
-
-   For local development, use:
-   ```env
-   API_BASE_URL=https://your-panel-domain.com
-   ```
-
-4. **Run the bot:**
-   ```bash
-   python -m src.main
-   ```
-
-## Configuration
-
-### Environment Variables
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `BOT_TOKEN` | Yes | - | Telegram bot token from @BotFather |
-| `API_BASE_URL` | Yes | - | Remnawave API base URL |
-| `API_TOKEN` | Yes | - | API authentication token |
-| `ADMINS` | Yes | - | Comma-separated list of Telegram user IDs |
-| `DEFAULT_LOCALE` | No | `ru` | Default language (`ru` or `en`) |
-| `LOG_LEVEL` | No | `INFO` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
-
-### Docker Network
-
-The bot requires access to the `remnawave-network` Docker network. If it doesn't exist, create it:
+### Install
 
 ```bash
-docker network create remnawave-network
+git clone https://github.com/aeshtlv/remnabuy.git
+cd remnabuy
+cp env.sample .env
+nano .env
+docker network create remnawave-network || true
+docker compose up -d --build
+docker compose logs -f bot
 ```
 
-## Commands
+> `docker-compose.yml` loads `.env` automatically via `env_file`.
 
-### Bot Commands
+## Configuration (.env)
 
-- `/start` - Start the bot and show main menu
-- `/help` - Show help information
-- `/health` - Show system health status
-- `/stats` - Show panel and server statistics
-- `/bandwidth` - Show bandwidth statistics
-- `/user <username|telegram_id>` - View user details
-- `/user_create <username> <expire_iso> [telegram_id]` - Create new user
-- `/sub <short_uuid>` - Open subscription link
-- `/node <uuid>` - View node details
-- `/host <uuid>` - View host details
+See `env.sample` for the full list.
 
-### Menu Navigation
+Key variables:
 
-The bot uses inline keyboards for navigation. Main sections:
+- **`BOT_TOKEN`**: bot token
+- **`API_BASE_URL`**: panel base URL (e.g. `https://panel.example.com`)
+- **`API_TOKEN`**: API token
+- **`ADMINS`**: comma-separated Telegram user IDs
+- **`SUBSCRIPTION_STARS_*`**: Stars prices
+- **`DEFAULT_INTERNAL_SQUADS` / `DEFAULT_EXTERNAL_SQUAD_UUID`**: squads for newly created users (important)
 
-- **Users** - User management, subscriptions, bulk operations
-- **Nodes** - Node management and monitoring
-- **Hosts** - Host management
-- **Resources** - Templates, snippets, API tokens, configs
-- **Billing** - Billing history, providers, billing nodes
-- **System** - Health, statistics, node management
+`DEFAULT_INTERNAL_SQUADS` supports:
+- `uuid1,uuid2`
+- `["uuid1","uuid2"]`
 
-## Project Structure
+## Development
 
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Linux/Mac
+# or: .venv\Scripts\activate  # Windows
+pip install -r requirements.txt
+cp env.sample .env
+python -m src.main
 ```
-remnabuy/
-├── src/
-│   ├── main.py              # Entry point
-│   ├── config.py            # Configuration management
-│   ├── handlers/
-│   │   ├── basic.py         # Command and callback handlers
-│   │   └── errors.py       # Error handlers
-│   ├── keyboards/          # Inline keyboard definitions
-│   ├── services/
-│   │   └── api_client.py  # Remnawave API client
-│   └── utils/              # Utilities (formatters, i18n, logger, auth)
-├── locales/
-│   ├── ru/                 # Russian translations
-│   └── en/                 # English translations
-├── docker-compose.yml      # Docker Compose configuration
-├── Dockerfile              # Docker image definition
-└── requirements.txt        # Python dependencies
-```
-
-## Creating Promo Codes
-
-Promo codes are created directly in the database:
-
-```sql
--- Promo code with 10% discount
-INSERT INTO promo_codes (code, discount_percent, max_uses, expires_at)
-VALUES ('PROMO10', 10, 100, '2025-12-31T23:59:59');
-
--- Promo code with bonus days
-INSERT INTO promo_codes (code, bonus_days, max_uses)
-VALUES ('BONUS7', 7, 50);
-```
-
-See [PAYMENT_INTEGRATION.md](PAYMENT_INTEGRATION.md) for details
 
 ## Troubleshooting
 
-### Bot doesn't respond
-
-1. Check if the bot is running:
-   ```bash
-   docker compose ps
-   ```
-
-2. Check logs for errors:
-   ```bash
-   docker compose logs -f bot
-   ```
-
-3. Verify environment variables:
-   ```bash
-   docker compose config
-   ```
-
-### API connection issues
-
-1. Verify `API_BASE_URL` is correct
-2. Check if the Docker network exists:
-   ```bash
-   docker network ls | grep remnawave-network
-   ```
-3. For external API, ensure the URL is accessible
-
-### Permission denied
-
-- Ensure your Telegram user ID is in the `ADMINS` environment variable
-- Get your user ID by messaging [@userinfobot](https://t.me/userinfobot)
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
-
-## License
-
-[Add your license here]
-
-## Support
-
-For issues and questions, please open an issue on GitHub.
+- **Prices/squads not updating**: ensure you edit `.env` next to `docker-compose.yml`, then `docker compose up -d --build`.
+- **Telegram temporary errors** (Bad Gateway / connection reset): server networking issue; consider proxy/VPN if frequent.
 
