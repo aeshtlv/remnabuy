@@ -1,14 +1,24 @@
 import os
-from functools import lru_cache
 from pathlib import Path
 from typing import List
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv, dotenv_values
 from pydantic import AnyHttpUrl, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / ".env")
+ENV_FILE = BASE_DIR / ".env"
+
+# Принудительно перечитываем .env при каждом импорте
+if ENV_FILE.exists():
+    # Перезагружаем переменные окружения из файла
+    env_vars = dotenv_values(ENV_FILE)
+    for key, value in env_vars.items():
+        if value is not None:
+            os.environ[key] = value
+else:
+    # Если .env не существует, используем переменные окружения процесса
+    load_dotenv(ENV_FILE, override=True)
 
 
 class Settings(BaseSettings):
@@ -79,10 +89,12 @@ class Settings(BaseSettings):
         return None
 
     model_config = SettingsConfigDict(
-        env_file=BASE_DIR / ".env",
+        env_file=str(ENV_FILE),  # Явно указываем путь как строку
         env_file_encoding="utf-8",
-        populate_by_name=True,
+        env_ignore_empty=True,  # Игнорируем пустые значения
+        populate_by_name=True,  # Разрешаем использовать alias
         extra="ignore",
+        case_sensitive=False,  # Не чувствительно к регистру
     )
 
     @property
@@ -137,12 +149,19 @@ class Settings(BaseSettings):
     @classmethod
     def parse_internal_squads(cls, value):
         """Парсит DEFAULT_INTERNAL_SQUADS в список UUID (через запятую)."""
+        # Также проверяем переменную окружения напрямую (на случай если pydantic не подхватил)
+        env_value = os.getenv("DEFAULT_INTERNAL_SQUADS")
+        if env_value and (value is None or value == "" or (isinstance(value, list) and len(value) == 0)):
+            value = env_value
+        
         if value is None or value == "":
             return []
         if isinstance(value, list):
             return [str(x).strip() for x in value if str(x).strip()]
         if isinstance(value, str):
-            return [x.strip() for x in value.split(",") if x.strip()]
+            # Убираем пробелы и разбиваем по запятой
+            parts = [x.strip() for x in value.split(",") if x.strip()]
+            return parts
         return []
     
     @model_validator(mode="after")
@@ -171,5 +190,13 @@ class Settings(BaseSettings):
 
 
 # Убрали @lru_cache чтобы изменения в .env применялись без перезапуска
+# Принудительно перечитываем .env при каждом вызове
 def get_settings() -> Settings:
+    # Перечитываем .env файл перед созданием Settings
+    if ENV_FILE.exists():
+        env_vars = dotenv_values(ENV_FILE)
+        for key, value in env_vars.items():
+            if value is not None:
+                os.environ[key] = value
+    
     return Settings()
