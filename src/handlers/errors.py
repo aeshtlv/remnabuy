@@ -1,4 +1,5 @@
 from aiogram.types.error_event import ErrorEvent
+from aiogram.exceptions import TelegramNetworkError, TelegramServerError
 from aiogram.utils.i18n import gettext as _
 
 from src.utils.logger import logger
@@ -7,6 +8,12 @@ from src.utils.logger import logger
 async def errors_handler(event: ErrorEvent) -> None:
     update = event.update
     exc = event.exception
+
+    # Telegram can have transient outages / network blocks from the host.
+    # Don't treat these as "app bugs" and don't try to reply (reply will fail too).
+    if isinstance(exc, (TelegramNetworkError, TelegramServerError)):
+        logger.warning("Telegram temporary/network error: %s", exc)
+        return
 
     user_id = None
     payload = None
