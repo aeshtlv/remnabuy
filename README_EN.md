@@ -29,7 +29,7 @@ RemnaBuy turns your Remnawave panel into a **user‑facing storefront**: a user 
 ### Install
 
 ```bash
-git clone https://github.com/aeshtlv/remnabuy.git
+git clone https://github.com/aeshtlv/RemnaShop_by_deadera.git
 cd remnabuy
 cp env.sample .env
 nano .env

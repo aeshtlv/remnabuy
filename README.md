@@ -29,7 +29,7 @@ RemnaBuy превращает Remnawave‑панель в **user‑facing вит
 ### Установка
 
 ```bash
-git clone https://github.com/aeshtlv/remnabuy.git
+git clone https://github.com/aeshtlv/RemnaShop_by_deadera.git
 cd remnabuy
 cp env.sample .env
 nano .env
@@ -75,7 +75,7 @@ python -m src.main
 
 ## Поддержка
 
-Issues: `https://github.com/aeshtlv/remnabuy/issues`
+Issues: `https://github.com/aeshtlv/RemnaShop_by_deadera/issues`
 
 ## Лицензия
 
