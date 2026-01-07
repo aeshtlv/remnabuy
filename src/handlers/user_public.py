@@ -367,6 +367,8 @@ async def cb_trial_activate(callback: CallbackQuery) -> None:
                     expire_at=expire_at,
                     telegram_id=user_id,
                     description="trial",
+                    external_squad_uuid=settings.default_external_squad_uuid,
+                    active_internal_squads=settings.default_internal_squads or None,
                 )
                 break
             except Exception:

@@ -86,7 +86,7 @@ async def create_subscription_invoice(
             title=f"Remnawave {description_ru}",
             description=description,
             payload=invoice_payload,
-            provider_token="",  # Для Stars не требуется
+            provider_token=None,  # Для Stars не требуется
             currency="XTR",  # Telegram Stars currency
             prices=[LabeledPrice(label=price_label, amount=stars)],
         )
@@ -172,6 +172,7 @@ async def process_successful_payment(
         
         # Создаем пользователя в Remnawave
         from src.services.api_client import api_client
+        settings = get_settings()
         
         # Проверяем, есть ли уже пользователь
         remnawave_uuid = bot_user.get("remnawave_user_uuid")
@@ -196,7 +197,9 @@ async def process_successful_payment(
                 user_data = await api_client.create_user(
                     username=username,
                     expire_at=expire_date,
-                    telegram_id=user_id
+                    telegram_id=user_id,
+                    external_squad_uuid=settings.default_external_squad_uuid,
+                    active_internal_squads=settings.default_internal_squads or None,
                 )
                 user_info = user_data.get("response", user_data)
                 user_uuid = user_info.get("uuid")
@@ -206,7 +209,9 @@ async def process_successful_payment(
             user_data = await api_client.create_user(
                 username=username,
                 expire_at=expire_date,
-                telegram_id=user_id
+                telegram_id=user_id,
+                external_squad_uuid=settings.default_external_squad_uuid,
+                active_internal_squads=settings.default_internal_squads or None,
             )
             user_info = user_data.get("response", user_data)
             user_uuid = user_info.get("uuid")

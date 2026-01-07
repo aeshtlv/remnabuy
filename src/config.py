@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     subscription_stars_6months: int = Field(450, alias="SUBSCRIPTION_STARS_6MONTHS")  # Stars за 6 месяцев
     subscription_stars_12months: int = Field(800, alias="SUBSCRIPTION_STARS_12MONTHS")  # Stars за 12 месяцев
     trial_days: int = Field(3, alias="TRIAL_DAYS")  # Дней пробной подписки
+    # Дефолтные сквады для новых пользователей
+    default_external_squad_uuid: str | None = Field(default=None, alias="DEFAULT_EXTERNAL_SQUAD_UUID")
+    default_internal_squads: list[str] = Field(default_factory=list, alias="DEFAULT_INTERNAL_SQUADS", json_schema_extra={"type": "string"})
 
     @field_validator("notifications_chat_id", mode="before")
     @classmethod
@@ -128,6 +131,18 @@ class Settings(BaseSettings):
             return result
         
         print(f"DEBUG parse_admins: value type not handled, returning []")
+        return []
+    
+    @field_validator("default_internal_squads", mode="before")
+    @classmethod
+    def parse_internal_squads(cls, value):
+        """Парсит DEFAULT_INTERNAL_SQUADS в список UUID (через запятую)."""
+        if value is None or value == "":
+            return []
+        if isinstance(value, list):
+            return [str(x).strip() for x in value if str(x).strip()]
+        if isinstance(value, str):
+            return [x.strip() for x in value.split(",") if x.strip()]
         return []
     
     @model_validator(mode="after")
