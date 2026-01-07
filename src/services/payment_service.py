@@ -116,7 +116,8 @@ async def create_subscription_invoice(
 async def process_successful_payment(
     user_id: int,
     invoice_payload: str,
-    total_amount: int
+    total_amount: int,
+    bot: Bot | None = None
 ) -> dict:
     """Обрабатывает успешный платеж и создает пользователя в Remnawave.
     
@@ -293,16 +294,67 @@ async def process_successful_payment(
         Payment.update_status(payment["id"], "completed", user_uuid)
         
         # Применяем промокод (если есть)
+        promo_discount = 0
+        promo_bonus_days = 0
         if promo_code:
             from src.database import PromoCode
+            promo = PromoCode.get(promo_code)
+            if promo:
+                promo_discount = promo.get("discount_percent", 0) or 0
+                promo_bonus_days = promo.get("bonus_days", 0) or 0
             PromoCode.use(promo_code, user_id)
+            
+            # Отправляем уведомление об использовании промокода
+            if bot:
+                from src.services.notification_service import notify_promo_usage
+                try:
+                    await notify_promo_usage(
+                        bot,
+                        user_id,
+                        username,
+                        promo_code,
+                        promo_discount,
+                        promo_bonus_days
+                    )
+                except Exception as notif_exc:
+                    logger.warning("Failed to send promo usage notification: %s", notif_exc)
         
         # Начисляем бонус рефереру (если есть)
         from src.services.referral_service import grant_referral_bonus
+        
         try:
-            await grant_referral_bonus(user_id)
+            referral_data = await grant_referral_bonus(user_id)
+            if referral_data and bot:
+                # Отправляем уведомление о реферальном бонусе
+                from src.services.notification_service import notify_referral_bonus
+                await notify_referral_bonus(
+                    bot,
+                    referral_data["referrer_id"],
+                    referral_data["referrer_username"],
+                    referral_data["referred_id"],
+                    referral_data["referred_username"],
+                    referral_data["bonus_days"],
+                    referral_data["new_expire"]
+                )
         except Exception as ref_exc:
             logger.warning("Failed to grant referral bonus on payment: %s", ref_exc)
+        
+        # Отправляем уведомление об успешной оплате
+        if bot:
+            from src.services.notification_service import notify_payment_success
+            try:
+                await notify_payment_success(
+                    bot,
+                    user_id,
+                    username,
+                    subscription_months,
+                    total_amount,
+                    promo_code,
+                    user_uuid,
+                    expire_date
+                )
+            except Exception as notif_exc:
+                logger.warning("Failed to send payment success notification: %s", notif_exc)
         
         logger.info(f"Payment processed successfully for user {user_id}: user_uuid={user_uuid}")
         

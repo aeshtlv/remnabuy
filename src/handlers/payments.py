@@ -78,7 +78,8 @@ async def process_successful_payment_message(message: Message) -> None:
             result = await process_successful_payment(
                 user_id=user_id,
                 invoice_payload=invoice_payload,
-                total_amount=total_amount
+                total_amount=total_amount,
+                bot=message.bot
             )
             
             if result.get("success"):

@@ -7,7 +7,7 @@ from src.services.api_client import api_client
 from src.utils.logger import logger
 
 
-async def grant_referral_bonus(referred_user_id: int) -> bool:
+async def grant_referral_bonus(referred_user_id: int) -> dict | None:
     """
     Начисляет бонусные дни рефереру за активацию реферала.
     
@@ -15,7 +15,7 @@ async def grant_referral_bonus(referred_user_id: int) -> bool:
         referred_user_id: ID пользователя, который активировал триал/оплатил подписку
     
     Returns:
-        True если бонус начислен, False если реферера нет или уже начислено
+        dict с данными о начислении бонуса, если успешно, иначе None
     """
     settings = get_settings()
     bonus_days = settings.referral_bonus_days
@@ -26,14 +26,26 @@ async def grant_referral_bonus(referred_user_id: int) -> bool:
     
     if not referrer_id:
         logger.debug("User %s has no referrer", referred_user_id)
-        return False
+        return None
     
-    # Проверяем, не начислен ли уже бонус
+    # Проверяем, не начислен ли уже бонус этому конкретному рефералу
     # (бонус начисляется только один раз — при первой активации триала/оплате)
-    referrals = Referral.get_referrals_count(referrer_id)
-    if referrals == 0:
-        logger.debug("No referral record found for referrer %s", referrer_id)
-        return False
+    from src.database import get_db_connection
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT bonus_days FROM referrals 
+            WHERE referrer_id = ? AND referred_id = ?
+        """, (referrer_id, referred_user_id))
+        row = cursor.fetchone()
+        
+        if not row:
+            logger.debug("No referral record for referrer=%s referred=%s", referrer_id, referred_user_id)
+            return None
+        
+        if row[0] > 0:
+            logger.debug("Bonus already granted for referrer=%s referred=%s", referrer_id, referred_user_id)
+            return None
     
     # Получаем UUID реферера в Remnawave
     referrer_user = BotUser.get_or_create(referrer_id, None)
@@ -44,7 +56,7 @@ async def grant_referral_bonus(referred_user_id: int) -> bool:
             "Referrer %s has no Remnawave account, cannot grant bonus",
             referrer_id
         )
-        return False
+        return None
     
     try:
         # Получаем текущую подписку реферера
@@ -57,7 +69,7 @@ async def grant_referral_bonus(referred_user_id: int) -> bool:
                 "Referrer %s has no expireAt, cannot extend subscription",
                 referrer_id
             )
-            return False
+            return None
         
         # Продлеваем подписку на bonus_days
         current_dt = datetime.fromisoformat(current_expire.replace("Z", "+00:00"))
@@ -68,7 +80,7 @@ async def grant_referral_bonus(referred_user_id: int) -> bool:
         await api_client.update_user(referrer_uuid, expireAt=new_expire_iso)
         
         # Записываем в БД
-        Referral.grant_bonus(referrer_id, referred_user_id, bonus_days)
+        Referral.update_bonus_days(referrer_id, referred_user_id, bonus_days)
         
         logger.info(
             "✅ Referral bonus granted: referrer=%s referred=%s bonus_days=%s new_expire=%s",
@@ -78,7 +90,15 @@ async def grant_referral_bonus(referred_user_id: int) -> bool:
             new_expire_iso
         )
         
-        return True
+        # Возвращаем данные для уведомлений
+        return {
+            "referrer_id": referrer_id,
+            "referrer_username": referrer_user.get("username"),
+            "referred_id": referred_user_id,
+            "referred_username": referred_user.get("username"),
+            "bonus_days": bonus_days,
+            "new_expire": new_expire_iso
+        }
         
     except Exception as e:
         logger.exception(
@@ -86,5 +106,5 @@ async def grant_referral_bonus(referred_user_id: int) -> bool:
             referrer_id,
             e
         )
-        return False
+        return None
 

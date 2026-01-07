@@ -428,10 +428,35 @@ async def cb_trial_activate(callback: CallbackQuery) -> None:
         
         # Начисляем бонус рефереру (если есть)
         from src.services.referral_service import grant_referral_bonus
+        from src.services.notification_service import notify_trial_activation, notify_referral_bonus
+        
         try:
-            await grant_referral_bonus(user_id)
+            referral_data = await grant_referral_bonus(user_id)
+            if referral_data:
+                # Отправляем уведомление о реферальном бонусе
+                await notify_referral_bonus(
+                    callback.bot,
+                    referral_data["referrer_id"],
+                    referral_data["referrer_username"],
+                    referral_data["referred_id"],
+                    referral_data["referred_username"],
+                    referral_data["bonus_days"],
+                    referral_data["new_expire"]
+                )
         except Exception as ref_exc:
             logger.warning("Failed to grant referral bonus on trial activation: %s", ref_exc)
+        
+        # Отправляем уведомление об активации триала
+        try:
+            await notify_trial_activation(
+                callback.bot,
+                user_id,
+                callback.from_user.username,
+                trial_days,
+                user_uuid
+            )
+        except Exception as notif_exc:
+            logger.warning("Failed to send trial activation notification: %s", notif_exc)
 
         # На всякий случай дожимаем сквады через update (если create проигнорировал)
         if settings.default_external_squad_uuid or internal_squads:
