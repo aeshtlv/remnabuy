@@ -1,5 +1,6 @@
 import os
 import logging
+import json
 from pathlib import Path
 from typing import List
 
@@ -57,7 +58,9 @@ class Settings(BaseSettings):
     trial_days: int = Field(3, alias="TRIAL_DAYS")  # Дней пробной подписки
     # Дефолтные сквады для новых пользователей
     default_external_squad_uuid: str | None = Field(default=None, alias="DEFAULT_EXTERNAL_SQUAD_UUID")
-    default_internal_squads: list[str] = Field(default_factory=list, alias="DEFAULT_INTERNAL_SQUADS", json_schema_extra={"type": "string"})
+    # Важно: pydantic-settings пытается парсить list[str] из env как JSON, поэтому храним сырой строкой
+    # и уже потом парсим в list через property.
+    default_internal_squads_raw: str | None = Field(default=None, alias="DEFAULT_INTERNAL_SQUADS")
 
     @field_validator("notifications_chat_id", mode="before")
     @classmethod
@@ -134,30 +137,30 @@ class Settings(BaseSettings):
             return parsed
         return []
     
-    @field_validator("default_internal_squads", mode="before")
-    @classmethod
-    def parse_internal_squads(cls, value):
-        """Парсит DEFAULT_INTERNAL_SQUADS в список UUID (через запятую)."""
-        # Всегда читаем напрямую из окружения, т.к. Pydantic может не подхватить
-        env_value = os.getenv("DEFAULT_INTERNAL_SQUADS")
-        
-        # Если в env есть значение, используем его
-        if env_value:
-            if isinstance(env_value, str):
-                # Убираем пробелы и разбиваем по запятой
-                parts = [x.strip() for x in env_value.split(",") if x.strip()]
-                return parts
-        
-        # Если переменная окружения пустая, проверяем переданное значение
-        if value is None or value == "":
+    @property
+    def default_internal_squads(self) -> list[str]:
+        """Возвращает список внутренних squads.
+
+        Поддерживает форматы:
+        - "uuid1,uuid2"
+        - '["uuid1","uuid2"]'
+        """
+        raw = self.default_internal_squads_raw
+        if raw is None:
+            raw = os.getenv("DEFAULT_INTERNAL_SQUADS")
+        if not raw:
             return []
-        if isinstance(value, list):
-            return [str(x).strip() for x in value if str(x).strip()]
-        if isinstance(value, str):
-            # Убираем пробелы и разбиваем по запятой
-            parts = [x.strip() for x in value.split(",") if x.strip()]
-            return parts
-        return []
+        raw = str(raw).strip()
+        # JSON array
+        if raw.startswith("["):
+            try:
+                parsed = json.loads(raw)
+                if isinstance(parsed, list):
+                    return [str(x).strip() for x in parsed if str(x).strip()]
+            except Exception:
+                # fallback to comma split
+                pass
+        return [x.strip() for x in raw.split(",") if x.strip()]
     
     @model_validator(mode="after")
     def parse_admins_from_env(self):
