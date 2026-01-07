@@ -1,6 +1,4 @@
 """Сервис для работы с платежами через Telegram Stars."""
-import json
-import uuid
 from datetime import datetime, timedelta
 
 from aiogram import Bot
@@ -54,15 +52,9 @@ async def create_subscription_invoice(
     stars = int(base_stars * (1 - discount_percent / 100))
     subscription_days = subscription_months * 30
     
-    # Создаем payload для invoice
-    invoice_payload = json.dumps({
-        "user_id": user_id,
-        "subscription_months": subscription_months,
-        "subscription_days": subscription_days,
-        "stars": stars,
-        "promo_code": promo_code,
-        "timestamp": datetime.now().isoformat()
-    })
+    # Создаем короткий payload для invoice (Telegram ограничивает длину)
+    # Используем только необходимые данные
+    invoice_payload = f"{user_id}:{subscription_months}:{stars}:{promo_code or ''}"
     
     # Создаем запись о платеже
     payment_id = Payment.create(
@@ -120,10 +112,23 @@ async def process_successful_payment(
         Словарь с результатом (success, user_uuid, subscription_url, error)
     """
     try:
-        # Парсим payload
-        payload_data = json.loads(invoice_payload)
-        subscription_days = payload_data.get("subscription_days", 30)
-        promo_code = payload_data.get("promo_code")
+        # Парсим короткий payload формата: user_id:months:stars:promo
+        parts = invoice_payload.split(":")
+        if len(parts) < 3:
+            logger.error(f"Invalid payload format: {invoice_payload}")
+            return {"success": False, "error": "Invalid payload format"}
+        
+        payload_user_id = int(parts[0])
+        subscription_months = int(parts[1])
+        payload_stars = int(parts[2])
+        promo_code = parts[3] if len(parts) > 3 and parts[3] else None
+        
+        subscription_days = subscription_months * 30
+        
+        # Проверяем user_id
+        if payload_user_id != user_id:
+            logger.error(f"User ID mismatch: payload={payload_user_id}, actual={user_id}")
+            return {"success": False, "error": "User ID mismatch"}
         
         # Находим платеж в БД
         payment = Payment.get_by_payload(invoice_payload)
@@ -139,8 +144,8 @@ async def process_successful_payment(
                 "already_completed": True
             }
         
-        # Проверяем сумму
-        if payment["stars"] != total_amount:
+        # Проверяем сумму (допускаем небольшую погрешность)
+        if abs(payment["stars"] - total_amount) > 1:
             logger.error(f"Amount mismatch: expected {payment['stars']}, got {total_amount}")
             Payment.update_status(payment["id"], "failed")
             return {"success": False, "error": "Amount mismatch"}

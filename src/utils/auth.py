@@ -64,11 +64,12 @@ class AdminMiddleware(BaseMiddleware):
         if isinstance(event, CallbackQuery):
             if event.data:
                 # Колбэки админов начинаются с определенных префиксов
+                # НЕ включаем user: и buy: - это пользовательские колбэки!
                 admin_prefixes = [
-                    "menu:", "user:", "node:", "host:", "token:", "template:",
+                    "menu:", "node:", "host:", "token:", "template:",
                     "snippet:", "config:", "billing:", "provider:", "bulk:",
-                    "system:", "nav:", "subs:", "input:", "user_", "node_",
-                    "host_", "uef:", "nef:", "hef:", "stats:"
+                    "system:", "nav:", "subs:", "input:", "user_edit", "user_create",
+                    "user_search", "node_", "host_", "uef:", "nef:", "hef:", "stats:"
                 ]
                 is_admin_command = any(event.data.startswith(prefix) for prefix in admin_prefixes)
         

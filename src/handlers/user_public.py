@@ -71,10 +71,23 @@ def _get_language_keyboard() -> InlineKeyboardMarkup:
 
 @router.message(Command("start"))
 async def cmd_start(message: Message) -> None:
-    """Обработчик команды /start для пользователей."""
+    """Обработчик команды /start для всех пользователей."""
+    from src.utils.auth import is_admin
+    
     user_id = message.from_user.id
     username = message.from_user.username
     
+    # Если это админ, показываем админ-меню
+    if is_admin(user_id):
+        from src.handlers.navigation import _fetch_main_menu_text
+        from src.keyboards.main_menu import main_menu_keyboard
+        
+        await message.answer(_("bot.welcome"))
+        menu_text = await _fetch_main_menu_text()
+        await message.answer(menu_text, reply_markup=main_menu_keyboard())
+        return
+    
+    # Для обычных пользователей
     # Получаем или создаем пользователя
     user = BotUser.get_or_create(user_id, username)
     locale = user.get("language", "ru")
@@ -91,11 +104,11 @@ async def cmd_start(message: Message) -> None:
                 if referrer_id != user_id:
                     BotUser.set_referrer(user_id, referrer_id)
                     Referral.create(referrer_id, user_id)
-                    welcome_text = _("user.welcome_with_referral")
+                    welcome_text = _("user.welcome_with_referral", locale=locale)
             except (ValueError, IndexError):
-                welcome_text = _("user.welcome")
+                welcome_text = _("user.welcome", locale=locale)
         else:
-            welcome_text = _("user.welcome")
+            welcome_text = _("user.welcome", locale=locale)
         
         await message.answer(
             welcome_text,

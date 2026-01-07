@@ -50,15 +50,8 @@ from src.handlers.billing import _handle_billing_history_input, _handle_billing_
 router = Router(name="commands")
 
 
-@router.message(Command("start"))
-async def cmd_start(message: Message) -> None:
-    """Обработчик команды /start."""
-    if await _not_admin(message):
-        return
-
-    await _send_clean_message(message, _("bot.welcome"))
-    menu_text = await _fetch_main_menu_text()
-    await _send_clean_message(message, menu_text, reply_markup=main_menu_keyboard())
+# /start обрабатывается в user_public.py для всех пользователей
+# Админы получают доступ к командам через /help и меню
 
 
 @router.message(F.text & ~F.text.startswith("/"))
