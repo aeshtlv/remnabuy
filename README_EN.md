@@ -1,8 +1,8 @@
-# RemnaBuy — Remnawave Telegram Bot (subscriptions + admin panel)
+# RemnaBuy — SHFTVPN Telegram Bot (subscriptions + admin panel)
 
 **Languages:** [Русский](README.md)
 
-RemnaBuy turns your Remnawave panel into a **user‑facing storefront**: a user purchases a subscription → receives a config link, while admins keep full control of Remnawave from the bot.
+RemnaBuy turns your Remnawave panel into a **user‑facing storefront** for **SHFTVPN**: a user purchases a subscription → receives a config link, while admins keep full control of Remnawave from the bot.
 
 ## Features
 

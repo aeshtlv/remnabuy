@@ -56,6 +56,7 @@ class Settings(BaseSettings):
         description="Stars за 12 месяцев (дефолт: 800, если не указано в .env)"
     )
     trial_days: int = Field(3, alias="TRIAL_DAYS")  # Дней пробной подписки
+    referral_bonus_days: int = Field(3, alias="REFERRAL_BONUS_DAYS")  # Бонусных дней за реферала
     # Дефолтные сквады для новых пользователей
     default_external_squad_uuid: str | None = Field(default=None, alias="DEFAULT_EXTERNAL_SQUAD_UUID")
     # Важно: pydantic-settings пытается парсить list[str] из env как JSON, поэтому храним сырой строкой

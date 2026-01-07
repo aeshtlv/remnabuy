@@ -425,6 +425,13 @@ async def cb_trial_activate(callback: CallbackQuery) -> None:
         if user_uuid:
             BotUser.set_remnawave_uuid(user_id, user_uuid)
         BotUser.set_trial_used(user_id)
+        
+        # Начисляем бонус рефереру (если есть)
+        from src.services.referral_service import grant_referral_bonus
+        try:
+            await grant_referral_bonus(user_id)
+        except Exception as ref_exc:
+            logger.warning("Failed to grant referral bonus on trial activation: %s", ref_exc)
 
         # На всякий случай дожимаем сквады через update (если create проигнорировал)
         if settings.default_external_squad_uuid or internal_squads:
@@ -669,20 +676,36 @@ async def cb_referral(callback: CallbackQuery) -> None:
             bot_username = "your_bot"
         referral_link = f"https://t.me/{bot_username}?start={user_id}"
         
+        # Узнаём сколько дней даём за реферала
+        from src.config import get_settings
+        settings = get_settings()
+        bonus_per_referral = settings.referral_bonus_days
+        
         text = _("user.referral_info", locale=locale).format(
             link=referral_link,
             count=referrals_count,
-            bonus_days=bonus_days
+            bonus_days=bonus_days,
+            bonus_per_friend=bonus_per_referral
         )
         
-        await callback.message.edit_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    text=_("user.copy_referral_link", locale=locale),
+                    url=referral_link
+                )
+            ],
+            [
                 InlineKeyboardButton(
                     text=_("actions.back", locale=locale),
                     callback_data="user:menu"
                 )
-            ]])
+            ]
+        ]
+        
+        await callback.message.edit_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
         )
 
 

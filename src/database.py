@@ -278,6 +278,17 @@ class Referral:
             )
             result = cursor.fetchone()[0]
             return result if result else 0
+    
+    @staticmethod
+    def grant_bonus(referrer_id: int, referred_id: int, bonus_days: int) -> bool:
+        """Начисляет бонусные дни за реферала (обновляет запись)."""
+        with get_db_connection() as conn:
+            conn.execute("""
+                UPDATE referrals 
+                SET bonus_days = bonus_days + ?, bonus_granted_at = ?
+                WHERE referrer_id = ? AND referred_id = ?
+            """, (bonus_days, datetime.now().isoformat(), referrer_id, referred_id))
+            return conn.total_changes > 0
 
 
 class Payment:

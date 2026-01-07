@@ -297,6 +297,13 @@ async def process_successful_payment(
             from src.database import PromoCode
             PromoCode.use(promo_code, user_id)
         
+        # Начисляем бонус рефереру (если есть)
+        from src.services.referral_service import grant_referral_bonus
+        try:
+            await grant_referral_bonus(user_id)
+        except Exception as ref_exc:
+            logger.warning("Failed to grant referral bonus on payment: %s", ref_exc)
+        
         logger.info(f"Payment processed successfully for user {user_id}: user_uuid={user_uuid}")
         
         return {

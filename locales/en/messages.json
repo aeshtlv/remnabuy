@@ -627,7 +627,8 @@
     "promo_discount": "Discount",
     "promo_bonus_days": "Bonus days",
     "promo_error": "⚠️ Error applying promo code.",
-    "referral_info": "👥 Referral program\n\n🔗 Your referral link:\n{link}\n\n📊 Friends invited: {count}\n🎁 Bonus days: {bonus_days}",
+    "referral_info": "👥 Referral program\n\n🎁 For each friend: <b>+{bonus_per_friend} days</b>\n\n🔗 Your referral link:\n<code>{link}</code>\n\n📊 Stats:\n  • Friends invited: {count}\n  • Bonus days received: {bonus_days}",
+    "copy_referral_link": "📋 Open link",
     "buy_info": "💳 Buy subscription\n\nPayment via Telegram Stars."
   },
   "payment": {
@@ -644,7 +645,7 @@
     "invoice_created": "💳 Invoice created\n\nClick the button below to pay for the subscription via Telegram Stars.",
     "pay_button": "💳 Pay",
     "error_creating_invoice": "❌ Error creating invoice. Please try again later.",
-    "success": "✅ Payment processed successfully!\n\nYour subscription is active until: {expire_date}\n\nYou can now use Remnawave VPN service.",
+    "success": "✅ Payment processed successfully!\n\nYour subscription is active until: {expire_date}\n\nYou can now use SHFTVPN service.",
     "already_processed": "ℹ️ This payment has already been processed.",
     "subscription_link": "🔗 Configuration link",
     "view_subscription": "📋 View my subscription",
