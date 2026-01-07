@@ -11,7 +11,7 @@ def setup_logger() -> logging.Logger:
     )
     # Align aiogram logger level with our settings.
     logging.getLogger("aiogram").setLevel(level)
-    return logging.getLogger("remnawave-admin-bot")
+    return logging.getLogger("remnabuy-bot")
 
 
 logger = setup_logger()

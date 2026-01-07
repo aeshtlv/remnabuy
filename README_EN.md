@@ -1,7 +1,7 @@
-# Remnawave Admin Bot
+# RemnaBuy - Remnawave Subscription Purchase Bot
 **Available languages:** [Русский](README.md)
 
-Telegram bot for managing Remnawave panel. Supports RU/EN localization, inline buttons, Docker Compose deployment.
+Telegram bot for purchasing and managing Remnawave VPN subscriptions. Supports payment via Telegram Stars, promo codes, referral program, and trial subscriptions. Also includes full admin panel for managing users, nodes, and billing.
 
 ## Features
 
@@ -28,10 +28,10 @@ Telegram bot for managing Remnawave panel. Supports RU/EN localization, inline b
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/case211/remnawave-admin.git
+   git clone https://github.com/aeshtlv/remnabuy.git
    ```
    ```bash
-   cd remnawave-admin
+   cd remnabuy
    ```
 
 2. **Copy environment file:**
@@ -150,7 +150,7 @@ The bot uses inline keyboards for navigation. Main sections:
 ## Project Structure
 
 ```
-remnawave-admin/
+remnabuy/
 ├── src/
 │   ├── main.py              # Entry point
 │   ├── config.py            # Configuration management
@@ -169,15 +169,21 @@ remnawave-admin/
 └── requirements.txt        # Python dependencies
 ```
 
-## Docker Image
+## Creating Promo Codes
 
-The bot image is automatically built and published to GitHub Container Registry:
+Promo codes are created directly in the database:
 
+```sql
+-- Promo code with 10% discount
+INSERT INTO promo_codes (code, discount_percent, max_uses, expires_at)
+VALUES ('PROMO10', 10, 100, '2025-12-31T23:59:59');
+
+-- Promo code with bonus days
+INSERT INTO promo_codes (code, bonus_days, max_uses)
+VALUES ('BONUS7', 7, 50);
 ```
-ghcr.io/case211/remnawave-admin:latest
-```
 
-Build workflow: `.github/workflows/docker.yml`
+See [PAYMENT_INTEGRATION.md](PAYMENT_INTEGRATION.md) for details
 
 ## Troubleshooting
 

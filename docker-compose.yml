@@ -1,6 +1,8 @@
 services:
   bot:
-    image: ghcr.io/case211/remnawave-admin:latest
+    build: .
+    # Или используйте готовый образ:
+    # image: ghcr.io/aeshtlv/remnabuy:latest
     restart: unless-stopped
     environment:
       PYTHONPATH: /app
