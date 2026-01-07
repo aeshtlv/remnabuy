@@ -76,3 +76,7 @@ python -m src.main
 ## Поддержка
 
 Issues: `https://github.com/aeshtlv/remnabuy/issues`
+
+## Лицензия
+
+MIT — см. `LICENSE`.

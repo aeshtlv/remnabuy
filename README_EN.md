@@ -73,3 +73,7 @@ python -m src.main
 - **Prices/squads not updating**: ensure you edit `.env` next to `docker-compose.yml`, then `docker compose up -d --build`.
 - **Telegram temporary errors** (Bad Gateway / connection reset): server networking issue; consider proxy/VPN if frequent.
 
+## License
+
+MIT — see `LICENSE`.
+
