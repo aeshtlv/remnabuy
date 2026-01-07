@@ -265,12 +265,12 @@ async def cb_subscription(callback: CallbackQuery) -> None:
             ]]
             
             if subscription_url:
-                keyboard_buttons.insert(0, [[
+                keyboard_buttons.insert(0, [
                     InlineKeyboardButton(
                         text=_("user.get_config", locale=locale),
                         url=subscription_url
                     )
-                ]])
+                ])
             
             await callback.message.edit_text(
                 text,
