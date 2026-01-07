@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     subscription_stars_3months: int = Field(250, alias="SUBSCRIPTION_STARS_3MONTHS")  # Stars за 3 месяца
     subscription_stars_6months: int = Field(450, alias="SUBSCRIPTION_STARS_6MONTHS")  # Stars за 6 месяцев
     subscription_stars_12months: int = Field(800, alias="SUBSCRIPTION_STARS_12MONTHS")  # Stars за 12 месяцев
+    trial_days: int = Field(3, alias="TRIAL_DAYS")  # Дней пробной подписки
 
     @field_validator("notifications_chat_id", mode="before")
     @classmethod

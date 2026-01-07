@@ -15,46 +15,54 @@ from src.utils.logger import logger
 router = Router(name="user_public")
 
 
-def _get_user_menu_keyboard(locale: str) -> InlineKeyboardMarkup:
+def _get_user_menu_keyboard(user_id: int) -> InlineKeyboardMarkup:
     """Создает клавиатуру главного меню пользователя."""
+    from src.utils.auth import is_admin
     buttons = [
         [
             InlineKeyboardButton(
-                text=_("user_menu.subscription", locale=locale),
+                text=_("user_menu.subscription"),
                 callback_data="user:subscription"
             )
         ],
         [
             InlineKeyboardButton(
-                text=_("user_menu.buy_subscription", locale=locale),
+                text=_("user_menu.buy_subscription"),
                 callback_data="user:buy"
             )
         ],
         [
             InlineKeyboardButton(
-                text=_("user_menu.trial", locale=locale),
+                text=_("user_menu.trial"),
                 callback_data="user:trial"
             )
         ],
         [
             InlineKeyboardButton(
-                text=_("user_menu.promo_code", locale=locale),
+                text=_("user_menu.promo_code"),
                 callback_data="user:promo"
             )
         ],
         [
             InlineKeyboardButton(
-                text=_("user_menu.referral", locale=locale),
+                text=_("user_menu.referral"),
                 callback_data="user:referral"
             )
         ],
         [
             InlineKeyboardButton(
-                text=_("user_menu.language", locale=locale),
+                text=_("user_menu.language"),
                 callback_data="user:language"
             )
         ]
     ]
+    if is_admin(user_id):
+        buttons.append([
+            InlineKeyboardButton(
+                text=_("user_menu.admin_panel"),
+                callback_data="admin:panel",
+            )
+        ])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -72,22 +80,9 @@ def _get_language_keyboard() -> InlineKeyboardMarkup:
 @router.message(Command("start"))
 async def cmd_start(message: Message) -> None:
     """Обработчик команды /start для всех пользователей."""
-    from src.utils.auth import is_admin
-    
     user_id = message.from_user.id
     username = message.from_user.username
-    
-    # Если это админ, показываем админ-меню
-    if is_admin(user_id):
-        from src.handlers.navigation import _fetch_main_menu_text
-        from src.keyboards.main_menu import main_menu_keyboard
-        
-        await message.answer(_("bot.welcome"))
-        menu_text = await _fetch_main_menu_text()
-        await message.answer(menu_text, reply_markup=main_menu_keyboard())
-        return
-    
-    # Для обычных пользователей
+
     # Получаем или создаем пользователя
     user = BotUser.get_or_create(user_id, username)
     locale = user.get("language", "ru")
@@ -104,16 +99,33 @@ async def cmd_start(message: Message) -> None:
                 if referrer_id != user_id:
                     BotUser.set_referrer(user_id, referrer_id)
                     Referral.create(referrer_id, user_id)
-                    welcome_text = _("user.welcome_with_referral", locale=locale)
+                    welcome_text = _("user.welcome_with_referral")
             except (ValueError, IndexError):
-                welcome_text = _("user.welcome", locale=locale)
+                welcome_text = _("user.welcome")
         else:
-            welcome_text = _("user.welcome", locale=locale)
+            welcome_text = _("user.welcome")
         
         await message.answer(
             welcome_text,
-            reply_markup=_get_user_menu_keyboard(locale)
+            reply_markup=_get_user_menu_keyboard(user_id)
         )
+
+
+@router.callback_query(F.data == "admin:panel")
+async def cb_admin_panel(callback: CallbackQuery) -> None:
+    """Открывает админ-панель (только для админов)."""
+    from src.utils.auth import is_admin
+    from src.handlers.navigation import _fetch_main_menu_text
+    from src.keyboards.main_menu import main_menu_keyboard
+
+    await callback.answer()
+    if not is_admin(callback.from_user.id):
+        # Защита на всякий случай (middleware тоже блокирует)
+        await callback.answer(_("errors.unauthorized"), show_alert=True)
+        return
+
+    menu_text = await _fetch_main_menu_text()
+    await callback.message.edit_text(menu_text, reply_markup=main_menu_keyboard())
 
 
 @router.callback_query(F.data == "user:menu")
@@ -128,7 +140,7 @@ async def cb_user_menu(callback: CallbackQuery) -> None:
     with i18n.use_locale(locale):
         await callback.message.edit_text(
             _("user_menu.title"),
-            reply_markup=_get_user_menu_keyboard(locale)
+            reply_markup=_get_user_menu_keyboard(user_id)
         )
 
 
@@ -161,7 +173,7 @@ async def cb_set_language(callback: CallbackQuery) -> None:
     with i18n.use_locale(language):
         await callback.message.edit_text(
             _("user.language_changed"),
-            reply_markup=_get_user_menu_keyboard(language)
+            reply_markup=_get_user_menu_keyboard(user_id)
         )
 
 
@@ -289,27 +301,27 @@ async def cb_trial(callback: CallbackQuery) -> None:
     with i18n.use_locale(locale):
         if user.get("trial_used"):
             await callback.message.edit_text(
-                _("user.trial_already_used", locale=locale),
+                _("user.trial_already_used"),
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                     InlineKeyboardButton(
-                        text=_("actions.back", locale=locale),
+                        text=_("actions.back"),
                         callback_data="user:menu"
                     )
                 ]])
             )
             return
         
-        # Показываем кнопку активации (для админа)
+        # Пользователь сам активирует триал кнопкой
         await callback.message.edit_text(
-            _("user.trial_info", locale=locale),
+            _("user.trial_info"),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton(
-                    text=_("user.activate_trial", locale=locale),
+                    text=_("user.activate_trial"),
                     callback_data="user:trial:activate"
                 )
             ], [
                 InlineKeyboardButton(
-                    text=_("actions.back", locale=locale),
+                    text=_("actions.back"),
                     callback_data="user:menu"
                 )
             ]])
@@ -318,7 +330,7 @@ async def cb_trial(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "user:trial:activate")
 async def cb_trial_activate(callback: CallbackQuery) -> None:
-    """Активация пробной подписки (пока просто показывает сообщение для админа)."""
+    """Активация пробной подписки (создаёт пользователя в Remnawave)."""
     await callback.answer()
     user_id = callback.from_user.id
     user = BotUser.get_or_create(user_id, callback.from_user.username)
@@ -326,15 +338,76 @@ async def cb_trial_activate(callback: CallbackQuery) -> None:
     
     i18n = get_i18n()
     with i18n.use_locale(locale):
-        # TODO: Интеграция с Remnawave API для создания пробной подписки
-        await callback.message.edit_text(
-            _("user.trial_activation_pending", locale=locale),
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(
-                    text=_("actions.back", locale=locale),
-                    callback_data="user:menu"
+        if user.get("trial_used") or user.get("remnawave_user_uuid"):
+            await callback.message.edit_text(
+                _("user.trial_already_used"),
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(text=_("actions.back"), callback_data="user:menu")
+                ]]),
+            )
+            return
+
+        from src.config import get_settings
+        settings = get_settings()
+        trial_days = max(1, int(settings.trial_days))
+
+        # Генерим безопасный username для Remnawave
+        base_username = (callback.from_user.username or "").lstrip("@")
+        if not base_username:
+            base_username = f"tg{user_id}"
+
+        expire_at = (datetime.utcnow() + timedelta(days=trial_days)).replace(microsecond=0).isoformat() + "Z"
+
+        created = None
+        username_try = base_username
+        for attempt in range(3):
+            try:
+                created = await api_client.create_user(
+                    username=username_try,
+                    expire_at=expire_at,
+                    telegram_id=user_id,
+                    description="trial",
                 )
-            ]])
+                break
+            except Exception:
+                # возможно конфликт username — добавим суффикс
+                username_try = f"{base_username}_{attempt+1}"
+                continue
+
+        if not created:
+            await callback.message.edit_text(
+                _("user.trial_activation_failed"),
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(text=_("actions.back"), callback_data="user:menu")
+                ]]),
+            )
+            return
+
+        info = created.get("response", created)
+        user_uuid = info.get("uuid")
+        if user_uuid:
+            BotUser.set_remnawave_uuid(user_id, user_uuid)
+        BotUser.set_trial_used(user_id)
+
+        # Получаем ссылку на подписку
+        subscription_url = ""
+        short_uuid = info.get("shortUuid")
+        if short_uuid:
+            try:
+                sub_info = await api_client.get_subscription_info(short_uuid)
+                sub_data = sub_info.get("response", sub_info)
+                subscription_url = sub_data.get("subscriptionUrl", "") or ""
+            except Exception:
+                subscription_url = ""
+
+        buttons: list[list[InlineKeyboardButton]] = []
+        if subscription_url:
+            buttons.append([InlineKeyboardButton(text=_("user.get_config"), url=subscription_url)])
+        buttons.append([InlineKeyboardButton(text=_("actions.back"), callback_data="user:menu")])
+
+        await callback.message.edit_text(
+            _("user.trial_activated").format(days=trial_days),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
         )
 
 
@@ -527,38 +600,38 @@ async def cb_buy(callback: CallbackQuery) -> None:
         buttons = [
             [
                 InlineKeyboardButton(
-                    text=_("payment.subscription_1month", locale=locale),
+                    text=_("payment.subscription_1month"),
                     callback_data="buy:1"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text=_("payment.subscription_3months", locale=locale),
+                    text=_("payment.subscription_3months"),
                     callback_data="buy:3"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text=_("payment.subscription_6months", locale=locale),
+                    text=_("payment.subscription_6months"),
                     callback_data="buy:6"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text=_("payment.subscription_12months", locale=locale),
+                    text=_("payment.subscription_12months"),
                     callback_data="buy:12"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text=_("actions.back", locale=locale),
+                    text=_("actions.back"),
                     callback_data="user:menu"
                 )
             ]
         ]
         
         await callback.message.edit_text(
-            _("payment.choose_subscription", locale=locale),
+            _("payment.choose_subscription"),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
         )
 
@@ -590,21 +663,21 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
             buttons = [
                 [
                     InlineKeyboardButton(
-                        text=_("payment.pay_button", locale=locale),
+                        text=_("payment.pay_button"),
                         url=invoice_link
                     )
                 ],
                 [
                     InlineKeyboardButton(
-                        text=_("actions.back", locale=locale),
+                        text=_("actions.back"),
                         callback_data="user:buy"
                     )
                 ]
             ]
             
-            text = _("payment.invoice_created", locale=locale)
+            text = _("payment.invoice_created")
             if promo_code:
-                text += f"\n\n🎫 {_('user.promo_applied', locale=locale)}"
+                text += f"\n\n🎫 {_('user.promo_applied')}"
             
             await callback.message.edit_text(
                 text,
@@ -628,10 +701,10 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
         i18n = get_i18n()
         with i18n.use_locale(locale):
             await callback.message.edit_text(
-                _("payment.error_creating_invoice", locale=locale),
+                _("payment.error_creating_invoice"),
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                     InlineKeyboardButton(
-                        text=_("actions.back", locale=locale),
+                        text=_("actions.back"),
                         callback_data="user:buy"
                     )
                 ]])

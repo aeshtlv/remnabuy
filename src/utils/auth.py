@@ -66,6 +66,7 @@ class AdminMiddleware(BaseMiddleware):
                 # Колбэки админов начинаются с определенных префиксов
                 # НЕ включаем user: и buy: - это пользовательские колбэки!
                 admin_prefixes = [
+                    "admin:",
                     "menu:", "node:", "host:", "token:", "template:",
                     "snippet:", "config:", "billing:", "provider:", "bulk:",
                     "system:", "nav:", "subs:", "input:", "user_edit", "user_create",

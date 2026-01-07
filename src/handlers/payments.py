@@ -83,10 +83,10 @@ async def process_successful_payment_message(message: Message) -> None:
             
             if result.get("success"):
                 if result.get("already_completed"):
-                    text = _("payment.already_processed", locale=locale)
+                    text = _("payment.already_processed")
                     buttons = [[
                         InlineKeyboardButton(
-                            text=_("user_menu.subscription", locale=locale),
+                            text=_("user_menu.subscription"),
                             callback_data="user:subscription"
                         )
                     ]]
@@ -94,18 +94,18 @@ async def process_successful_payment_message(message: Message) -> None:
                     subscription_url = result.get("subscription_url", "")
                     expire_date = result.get("expire_date", "")
                     
-                    text = _("payment.success", locale=locale).format(
-                        expire_date=expire_date[:10] if expire_date else _("payment.unknown", locale=locale)
+                    text = _("payment.success").format(
+                        expire_date=expire_date[:10] if expire_date else _("payment.unknown")
                     )
                     
                     buttons = []
                     if subscription_url:
                         buttons.append([InlineKeyboardButton(
-                            text=_("user.get_config", locale=locale),
+                            text=_("user.get_config"),
                             url=subscription_url
                         )])
                     buttons.append([InlineKeyboardButton(
-                        text=_("payment.view_subscription", locale=locale),
+                        text=_("payment.view_subscription"),
                         callback_data="user:subscription"
                     )])
                     
@@ -116,15 +116,15 @@ async def process_successful_payment_message(message: Message) -> None:
                     )
                     return
             else:
-                error = result.get("error", _("payment.error_processing", locale=locale))
-                text = _("payment.error", locale=locale).format(error=error)
+                error = result.get("error", _("payment.error_processing"))
+                text = _("payment.error").format(error=error)
                 
                 # Уведомляем пользователя, что нужно обратиться в поддержку
-                text += f"\n\n{_('payment.contact_support', locale=locale)}"
+                text += f"\n\n{_('payment.contact_support')}"
                 
                 buttons = [[
                     InlineKeyboardButton(
-                        text=_("actions.back", locale=locale),
+                        text=_("actions.back"),
                         callback_data="user:menu"
                     )
                 ]]
@@ -138,7 +138,7 @@ async def process_successful_payment_message(message: Message) -> None:
         except Exception as e:
             logger.exception("Error processing successful payment")
             await message.answer(
-                _("payment.error_processing", locale=locale),
+                _("payment.error_processing"),
                 parse_mode="HTML"
             )
 

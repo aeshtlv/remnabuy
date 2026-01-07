@@ -50,6 +50,8 @@ async def create_subscription_invoice(
             discount_percent = promo.get("discount_percent", 0) or 0
     
     stars = int(base_stars * (1 - discount_percent / 100))
+    # Telegram не принимает нулевую сумму
+    stars = max(1, stars)
     subscription_days = subscription_months * 30
     
     # Создаем короткий payload для invoice (Telegram ограничивает длину)
@@ -75,6 +77,8 @@ async def create_subscription_invoice(
     
     description_ru, description_en = locale_map[subscription_months]
     description = f"Подписка Remnawave {description_ru} | Remnawave subscription {description_en}"
+    # LabeledPrice.label имеет строгий лимит длины у Telegram — держим коротким
+    price_label = f"Remnawave {subscription_months}m"
     
     # Создаем invoice link
     try:
@@ -84,13 +88,21 @@ async def create_subscription_invoice(
             payload=invoice_payload,
             provider_token="",  # Для Stars не требуется
             currency="XTR",  # Telegram Stars currency
-            prices=[LabeledPrice(label=description, amount=stars)],
+            prices=[LabeledPrice(label=price_label, amount=stars)],
         )
         
         logger.info(f"Invoice created for user {user_id}: {payment_id}, {stars} stars")
         return invoice_link.invoice_link
     except Exception as e:
-        logger.error(f"Failed to create invoice for user {user_id}: {e}")
+        logger.exception(
+            "Failed to create invoice for user %s: %s (payload=%r stars=%s months=%s promo=%r)",
+            user_id,
+            type(e).__name__,
+            invoice_payload,
+            stars,
+            subscription_months,
+            promo_code,
+        )
         # Обновляем статус платежа на failed
         Payment.update_status(payment_id, "failed")
         raise
