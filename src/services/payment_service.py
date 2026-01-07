@@ -35,6 +35,10 @@ async def create_subscription_invoice(
         6: settings.subscription_stars_6months,
         12: settings.subscription_stars_12months,
     }
+    logger.info(
+        "Stars price table: 1m=%s,3m=%s,6m=%s,12m=%s (requested %s months)",
+        stars_prices[1], stars_prices[3], stars_prices[6], stars_prices[12], subscription_months
+    )
     
     if subscription_months not in stars_prices:
         raise ValueError(f"Invalid subscription months: {subscription_months}")
@@ -183,6 +187,22 @@ async def process_successful_payment(
             try:
                 user_data = await api_client.get_user_by_uuid(remnawave_uuid)
                 current_expire = user_data.get("response", {}).get("expireAt")
+                # Убедимся, что нужные сквады применены
+                try:
+                    desired_external = settings.default_external_squad_uuid
+                    desired_internal = settings.default_internal_squads or None
+                    if desired_external or desired_internal:
+                        await api_client.update_user(
+                            remnawave_uuid,
+                            externalSquadUuid=desired_external,
+                            activeInternalSquads=desired_internal,
+                        )
+                        logger.info(
+                            "Applied squads to existing user %s: external=%s internal=%s",
+                            remnawave_uuid, desired_external, desired_internal
+                        )
+                except Exception as squad_exc:
+                    logger.warning("Failed to apply squads to existing user %s: %s", remnawave_uuid, squad_exc)
                 
                 if current_expire:
                     # Продлеваем подписку от текущей даты
@@ -223,6 +243,15 @@ async def process_successful_payment(
             user_info = user_data.get("response", user_data)
             user_uuid = user_info.get("uuid")
             BotUser.set_remnawave_uuid(user_id, user_uuid)
+            # На всякий случай повторно применим сквады через update (если create их проигнорировал)
+            try:
+                await api_client.update_user(
+                    user_uuid,
+                    externalSquadUuid=settings.default_external_squad_uuid,
+                    activeInternalSquads=settings.default_internal_squads or None,
+                )
+            except Exception as squad_exc:
+                logger.warning("Failed to confirm squads on new user %s: %s", user_uuid, squad_exc)
         
         # Получаем ссылку на подписку
         user_full = await api_client.get_user_by_uuid(user_uuid)

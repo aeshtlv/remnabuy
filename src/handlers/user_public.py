@@ -402,6 +402,17 @@ async def cb_trial_activate(callback: CallbackQuery) -> None:
             BotUser.set_remnawave_uuid(user_id, user_uuid)
         BotUser.set_trial_used(user_id)
 
+        # На всякий случай дожимаем сквады через update (если create проигнорировал)
+        try:
+            await api_client.update_user(
+                user_uuid,
+                externalSquadUuid=settings.default_external_squad_uuid,
+                activeInternalSquads=internal_squads,
+            )
+            logger.info("Applied squads on trial user %s (external=%s, internal=%s)", user_uuid, settings.default_external_squad_uuid, internal_squads)
+        except Exception as squad_exc:
+            logger.warning("Failed to apply squads on trial user %s: %s", user_uuid, squad_exc)
+
         # Получаем ссылку на подписку
         subscription_url = ""
         short_uuid = info.get("shortUuid")
