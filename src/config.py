@@ -137,11 +137,17 @@ class Settings(BaseSettings):
     @classmethod
     def parse_internal_squads(cls, value):
         """Парсит DEFAULT_INTERNAL_SQUADS в список UUID (через запятую)."""
-        # Также проверяем переменную окружения напрямую (на случай если pydantic не подхватил)
+        # Всегда читаем напрямую из окружения, т.к. Pydantic может не подхватить
         env_value = os.getenv("DEFAULT_INTERNAL_SQUADS")
-        if env_value and (value is None or value == "" or (isinstance(value, list) and len(value) == 0)):
-            value = env_value
         
+        # Если в env есть значение, используем его
+        if env_value:
+            if isinstance(env_value, str):
+                # Убираем пробелы и разбиваем по запятой
+                parts = [x.strip() for x in env_value.split(",") if x.strip()]
+                return parts
+        
+        # Если переменная окружения пустая, проверяем переданное значение
         if value is None or value == "":
             return []
         if isinstance(value, list):
@@ -174,14 +180,54 @@ class Settings(BaseSettings):
         return self
 
 
-# Убрали @lru_cache чтобы изменения в .env применялись без перезапуска
-# Принудительно перечитываем .env при каждом вызове
-def get_settings() -> Settings:
-    # Перечитываем .env файл перед созданием Settings
+_settings_cache: Settings | None = None
+
+
+def get_settings(reload: bool = False) -> Settings:
+    """Получить настройки приложения (с кешированием).
+    
+    Args:
+        reload: Если True, принудительно перезагрузить настройки из .env
+    """
+    global _settings_cache
+    
+    # Если кеш есть и не требуется перезагрузка, возвращаем его
+    if _settings_cache is not None and not reload:
+        return _settings_cache
+    
+    # Принудительно перечитываем .env файл
     if ENV_FILE.exists():
         env_vars = dotenv_values(ENV_FILE)
         for key, value in env_vars.items():
             if value is not None:
                 os.environ[key] = value
     
-    return Settings()
+    # Создаем новый экземпляр Settings
+    settings = Settings()
+    _settings_cache = settings
+    
+    # Логируем настройки при первой загрузке или перезагрузке
+    logger = logging.getLogger("remnabuy-config")
+    logger.info("=" * 60)
+    logger.info("SETTINGS LOADED")
+    logger.info("=" * 60)
+    
+    # Логируем цены подписок
+    logger.info("Subscription prices (Stars):")
+    logger.info("  1 month:  %s stars (env: %s)", settings.subscription_stars_1month, os.getenv("SUBSCRIPTION_STARS_1MONTH", "NOT SET"))
+    logger.info("  3 months: %s stars (env: %s)", settings.subscription_stars_3months, os.getenv("SUBSCRIPTION_STARS_3MONTHS", "NOT SET"))
+    logger.info("  6 months: %s stars (env: %s)", settings.subscription_stars_6months, os.getenv("SUBSCRIPTION_STARS_6MONTHS", "NOT SET"))
+    logger.info("  12 months: %s stars (env: %s)", settings.subscription_stars_12months, os.getenv("SUBSCRIPTION_STARS_12MONTHS", "NOT SET"))
+    
+    # Логируем сквады
+    logger.info("Squads configuration:")
+    logger.info("  External squad: %s (env: %s)", settings.default_external_squad_uuid, os.getenv("DEFAULT_EXTERNAL_SQUAD_UUID", "NOT SET"))
+    logger.info("  Internal squads: %s (env: %s)", settings.default_internal_squads, os.getenv("DEFAULT_INTERNAL_SQUADS", "NOT SET"))
+    logger.info("  Parsed internal squads count: %s", len(settings.default_internal_squads) if settings.default_internal_squads else 0)
+    
+    # Логируем админов
+    logger.info("Admins: %s (env: %s)", settings.admins, os.getenv("ADMINS", "NOT SET"))
+    
+    logger.info("=" * 60)
+    
+    return settings

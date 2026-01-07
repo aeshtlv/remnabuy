@@ -205,6 +205,10 @@ class RemnawaveApiClient:
     async def update_user(self, user_uuid: str, **fields) -> dict:
         payload = {"uuid": user_uuid}
         payload.update({k: v for k, v in fields.items() if v is not None})
+        
+        # Логируем payload для отладки
+        logger.info("🔵 API: Updating user %s with payload: %s", user_uuid, payload)
+        
         return await self._patch("/api/users", json=payload)
 
     async def disable_user(self, user_uuid: str) -> dict:
@@ -302,6 +306,10 @@ class RemnawaveApiClient:
             payload["externalSquadUuid"] = external_squad_uuid
         if active_internal_squads:
             payload["activeInternalSquads"] = active_internal_squads
+        
+        # Логируем payload для отладки
+        logger.info("🔵 API: Creating user with payload: %s", payload)
+        
         return await self._post("/api/users", json=payload)
 
     # --- System ---
