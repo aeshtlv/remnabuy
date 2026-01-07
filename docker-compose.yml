@@ -1,0 +1,22 @@
+services:
+  bot:
+    image: ghcr.io/case211/remnawave-admin:latest
+    restart: unless-stopped
+    environment:
+      PYTHONPATH: /app
+      BOT_TOKEN: ${BOT_TOKEN:?BOT_TOKEN is required}
+      API_BASE_URL: ${API_BASE_URL:?API_BASE_URL is required}
+      API_TOKEN: ${API_TOKEN:-}
+      DEFAULT_LOCALE: ${DEFAULT_LOCALE:-ru}
+      ADMINS: ${ADMINS:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      NOTIFICATIONS_CHAT_ID: ${NOTIFICATIONS_CHAT_ID:-}
+      NOTIFICATIONS_TOPIC_ID: ${NOTIFICATIONS_TOPIC_ID:-}
+    networks:
+      - remnawave-network
+    # Бот будет ждать, пока API будет доступен (но не блокирует старт, если API еще не готов)
+    # Повторные попытки подключения реализованы в коде бота
+
+networks:
+  remnawave-network:
+    external: true
