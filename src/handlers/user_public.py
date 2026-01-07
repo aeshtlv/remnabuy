@@ -39,12 +39,6 @@ def _get_user_menu_keyboard(user_id: int) -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text=_("user_menu.promo_code"),
-                callback_data="user:promo"
-            )
-        ],
-        [
-            InlineKeyboardButton(
                 text=_("user_menu.referral"),
                 callback_data="user:referral"
             )
@@ -403,15 +397,24 @@ async def cb_trial_activate(callback: CallbackQuery) -> None:
         BotUser.set_trial_used(user_id)
 
         # На всякий случай дожимаем сквады через update (если create проигнорировал)
-        try:
-            await api_client.update_user(
-                user_uuid,
-                externalSquadUuid=settings.default_external_squad_uuid,
-                activeInternalSquads=internal_squads,
-            )
-            logger.info("Applied squads on trial user %s (external=%s, internal=%s)", user_uuid, settings.default_external_squad_uuid, internal_squads)
-        except Exception as squad_exc:
-            logger.warning("Failed to apply squads on trial user %s: %s", user_uuid, squad_exc)
+        if settings.default_external_squad_uuid or internal_squads:
+            try:
+                update_payload = {}
+                if settings.default_external_squad_uuid:
+                    update_payload["externalSquadUuid"] = settings.default_external_squad_uuid
+                if internal_squads:
+                    update_payload["activeInternalSquads"] = internal_squads
+                
+                if update_payload:
+                    await api_client.update_user(user_uuid, **update_payload)
+                    logger.info(
+                        "Applied squads on trial user %s: external=%s, internal=%s",
+                        user_uuid,
+                        settings.default_external_squad_uuid,
+                        internal_squads
+                    )
+            except Exception as squad_exc:
+                logger.warning("Failed to apply squads on trial user %s: %s", user_uuid, squad_exc)
 
         # Получаем ссылку на подписку
         subscription_url = ""
@@ -435,22 +438,31 @@ async def cb_trial_activate(callback: CallbackQuery) -> None:
         )
 
 
-@router.callback_query(F.data == "user:promo")
-async def cb_promo(callback: CallbackQuery) -> None:
-    """Обработчик промокода."""
+# Обработчик промокода убран из главного меню - теперь промокод вводится при оплате
+
+
+@router.callback_query(F.data.startswith("promo_input:"))
+async def cb_promo_input(callback: CallbackQuery) -> None:
+    """Запрашивает ввод промокода для выбранного периода."""
     await callback.answer()
     user_id = callback.from_user.id
     user = BotUser.get_or_create(user_id, callback.from_user.username)
     locale = user.get("language", "ru")
     
+    subscription_months = int(callback.data.split(":")[1])
+    
+    # Сохраняем состояние ожидания промокода
+    from src.handlers.state import PENDING_INPUT
+    PENDING_INPUT[user_id] = f"promo_for_buy:{subscription_months}"
+    
     i18n = get_i18n()
     with i18n.use_locale(locale):
         await callback.message.edit_text(
-            _("user.enter_promo_code", locale=locale),
+            _("payment.enter_promo_code_text").format(months=subscription_months),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton(
-                    text=_("actions.back", locale=locale),
-                    callback_data="user:menu"
+                    text=_("actions.cancel"),
+                    callback_data=f"buy:{subscription_months}"
                 )
             ]])
         )
@@ -458,18 +470,27 @@ async def cb_promo(callback: CallbackQuery) -> None:
 
 @router.message(F.text.regexp(r'^[A-Za-z0-9]{3,20}$'))
 async def handle_promo_code(message: Message) -> None:
-    """Обработка введенного промокода."""
+    """Обработка введенного промокода в процессе оплаты."""
     from src.handlers.state import PENDING_INPUT
     from src.utils.auth import is_admin
     
-    # Пропускаем, если это админ или есть ожидаемый ввод
     user_id = message.from_user.id
-    if is_admin(user_id) or user_id in PENDING_INPUT:
+    if is_admin(user_id):
         return
+    
+    # Проверяем, ожидается ли ввод промокода для оплаты
+    if user_id not in PENDING_INPUT:
+        return
+    
+    pending = PENDING_INPUT[user_id]
+    if not pending.startswith("promo_for_buy:"):
+        return
+    
+    subscription_months = int(pending.split(":")[1])
+    del PENDING_INPUT[user_id]
     
     user = BotUser.get_or_create(user_id, message.from_user.username)
     locale = user.get("language", "ru")
-    
     promo_code = message.text.upper()
     
     i18n = get_i18n()
@@ -478,40 +499,65 @@ async def handle_promo_code(message: Message) -> None:
         
         if not can_use:
             await message.answer(
-                error or _("user.promo_invalid", locale=locale),
-                reply_markup=_get_user_menu_keyboard(locale)
+                error or _("user.promo_invalid"),
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(
+                        text=_("actions.back"),
+                        callback_data=f"buy:{subscription_months}"
+                    )
+                ]])
             )
             return
         
-        # Проверяем промокод (не используем, просто показываем информацию)
-        promo = PromoCode.get(promo_code)
-        result_text = _("user.promo_valid", locale=locale)
+        # Промокод валиден - применяем его и создаем invoice
+        from src.services.payment_service import create_subscription_invoice
         
-        if promo.get("discount_percent"):
-            result_text += f"\n💯 {_('user.promo_discount', locale=locale)}: {promo['discount_percent']}%"
-        if promo.get("bonus_days"):
-            result_text += f"\n🎁 {_('user.promo_bonus_days', locale=locale)}: {promo['bonus_days']}"
-        
-        # Предлагаем использовать промокод при покупке
-        buttons = [
-            [
-                InlineKeyboardButton(
-                    text=_("payment.buy_with_promo", locale=locale),
-                    callback_data=f"promo_apply:{promo_code}"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text=_("actions.back", locale=locale),
-                    callback_data="user:menu"
-                )
+        try:
+            invoice_link = await create_subscription_invoice(
+                bot=message.bot,
+                user_id=user_id,
+                subscription_months=subscription_months,
+                promo_code=promo_code
+            )
+            
+            promo = PromoCode.get(promo_code)
+            promo_text = ""
+            if promo:
+                if promo.get("discount_percent"):
+                    promo_text = f"\n\n🎫 {_('user.promo_applied')}: {promo['discount_percent']}% {_('user.promo_discount')}"
+                elif promo.get("bonus_days"):
+                    promo_text = f"\n\n🎫 {_('user.promo_applied')}: +{promo['bonus_days']} {_('user.promo_bonus_days')}"
+            
+            buttons = [
+                [
+                    InlineKeyboardButton(
+                        text=_("payment.pay_button"),
+                        url=invoice_link
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text=_("actions.back"),
+                        callback_data="user:buy"
+                    )
+                ]
             ]
-        ]
-        
-        await message.answer(
-            result_text,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
-        )
+            
+            await message.answer(
+                _("payment.invoice_created") + promo_text,
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+            )
+        except Exception as e:
+            logger.exception("Error creating invoice with promo code")
+            await message.answer(
+                _("payment.error_creating_invoice"),
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(
+                        text=_("actions.back"),
+                        callback_data=f"buy:{subscription_months}"
+                    )
+                ]])
+            )
 
 
 @router.callback_query(F.data.startswith("promo_apply:"))
@@ -662,7 +708,7 @@ async def cb_buy(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data.startswith("buy:"))
 async def cb_buy_subscription(callback: CallbackQuery) -> None:
-    """Создает invoice для покупки подписки."""
+    """Обрабатывает покупку подписки - показывает ввод промокода или создает invoice."""
     await callback.answer()
     user_id = callback.from_user.id
     user = BotUser.get_or_create(user_id, callback.from_user.username)
@@ -671,42 +717,125 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
     try:
         parts = callback.data.split(":")
         subscription_months = int(parts[1])
-        promo_code = parts[2] if len(parts) > 2 else None
+        action = parts[2] if len(parts) > 2 else None
         
-        from src.services.payment_service import create_subscription_invoice
-        
-        invoice_link = await create_subscription_invoice(
-            bot=callback.message.bot,
-            user_id=user_id,
-            subscription_months=subscription_months,
-            promo_code=promo_code
-        )
-        
-        i18n = get_i18n()
-        with i18n.use_locale(locale):
-            buttons = [
-                [
-                    InlineKeyboardButton(
-                        text=_("payment.pay_button"),
-                        url=invoice_link
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        text=_("actions.back"),
-                        callback_data="user:buy"
-                    )
-                ]
-            ]
+        # Если action = "skip", пропускаем промокод и сразу создаем invoice
+        if action == "skip":
+            from src.services.payment_service import create_subscription_invoice
             
-            text = _("payment.invoice_created")
-            if promo_code:
-                text += f"\n\n🎫 {_('user.promo_applied')}"
-            
-            await callback.message.edit_text(
-                text,
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+            invoice_link = await create_subscription_invoice(
+                bot=callback.message.bot,
+                user_id=user_id,
+                subscription_months=subscription_months,
+                promo_code=None
             )
+            
+            i18n = get_i18n()
+            with i18n.use_locale(locale):
+                buttons = [
+                    [
+                        InlineKeyboardButton(
+                            text=_("payment.pay_button"),
+                            url=invoice_link
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text=_("actions.back"),
+                            callback_data="user:buy"
+                        )
+                    ]
+                ]
+                
+                await callback.message.edit_text(
+                    _("payment.invoice_created"),
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+                )
+        # Если есть промокод в callback, применяем его
+        elif action and action != "skip":
+            promo_code = action.upper()
+            from src.services.payment_service import create_subscription_invoice
+            
+            invoice_link = await create_subscription_invoice(
+                bot=callback.message.bot,
+                user_id=user_id,
+                subscription_months=subscription_months,
+                promo_code=promo_code
+            )
+            
+            i18n = get_i18n()
+            with i18n.use_locale(locale):
+                buttons = [
+                    [
+                        InlineKeyboardButton(
+                            text=_("payment.pay_button"),
+                            url=invoice_link
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text=_("actions.back"),
+                            callback_data="user:buy"
+                        )
+                    ]
+                ]
+                
+                promo = PromoCode.get(promo_code)
+                promo_text = ""
+                if promo:
+                    if promo.get("discount_percent"):
+                        promo_text = f"\n\n🎫 {_('user.promo_applied')}: {promo['discount_percent']}% {_('user.promo_discount')}"
+                    elif promo.get("bonus_days"):
+                        promo_text = f"\n\n🎫 {_('user.promo_applied')}: +{promo['bonus_days']} {_('user.promo_bonus_days')}"
+                
+                await callback.message.edit_text(
+                    _("payment.invoice_created") + promo_text,
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+                )
+        else:
+            # Показываем экран ввода промокода
+            i18n = get_i18n()
+            with i18n.use_locale(locale):
+                from src.config import get_settings
+                settings = get_settings()
+                
+                # Получаем цену для выбранного периода
+                prices = {
+                    1: settings.subscription_stars_1month,
+                    3: settings.subscription_stars_3months,
+                    6: settings.subscription_stars_6months,
+                    12: settings.subscription_stars_12months,
+                }
+                stars_price = prices.get(subscription_months, 0)
+                
+                buttons = [
+                    [
+                        InlineKeyboardButton(
+                            text=_("payment.enter_promo_code"),
+                            callback_data=f"promo_input:{subscription_months}"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text=_("payment.skip_promo_code"),
+                            callback_data=f"buy:{subscription_months}:skip"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text=_("actions.back"),
+                            callback_data="user:buy"
+                        )
+                    ]
+                ]
+                
+                await callback.message.edit_text(
+                    _("payment.promo_code_prompt").format(
+                        months=subscription_months,
+                        stars=stars_price
+                    ),
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+                )
     except ValueError as e:
         logger.exception("Invalid subscription months")
         i18n = get_i18n()

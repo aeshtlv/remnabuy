@@ -170,6 +170,6 @@ class Settings(BaseSettings):
         return self
 
 
-@lru_cache
+# Убрали @lru_cache чтобы изменения в .env применялись без перезапуска
 def get_settings() -> Settings:
     return Settings()

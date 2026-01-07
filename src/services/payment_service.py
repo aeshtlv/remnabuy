@@ -244,14 +244,24 @@ async def process_successful_payment(
             user_uuid = user_info.get("uuid")
             BotUser.set_remnawave_uuid(user_id, user_uuid)
             # На всякий случай повторно применим сквады через update (если create их проигнорировал)
-            try:
-                await api_client.update_user(
-                    user_uuid,
-                    externalSquadUuid=settings.default_external_squad_uuid,
-                    activeInternalSquads=settings.default_internal_squads or None,
-                )
-            except Exception as squad_exc:
-                logger.warning("Failed to confirm squads on new user %s: %s", user_uuid, squad_exc)
+            if settings.default_external_squad_uuid or internal_squads:
+                try:
+                    update_payload = {}
+                    if settings.default_external_squad_uuid:
+                        update_payload["externalSquadUuid"] = settings.default_external_squad_uuid
+                    if internal_squads:
+                        update_payload["activeInternalSquads"] = internal_squads
+                    
+                    if update_payload:
+                        await api_client.update_user(user_uuid, **update_payload)
+                        logger.info(
+                            "Applied squads on payment user %s: external=%s, internal=%s",
+                            user_uuid,
+                            settings.default_external_squad_uuid,
+                            internal_squads
+                        )
+                except Exception as squad_exc:
+                    logger.warning("Failed to apply squads on payment user %s: %s", user_uuid, squad_exc)
         
         # Получаем ссылку на подписку
         user_full = await api_client.get_user_by_uuid(user_uuid)
