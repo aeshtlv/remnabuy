@@ -31,10 +31,28 @@ class Settings(BaseSettings):
     notifications_chat_id: int | None = Field(default=None, alias="NOTIFICATIONS_CHAT_ID")
     notifications_topic_id: int | None = Field(default=None, alias="NOTIFICATIONS_TOPIC_ID")
     # Настройки для Telegram Stars платежей
-    subscription_stars_1month: int = Field(100, alias="SUBSCRIPTION_STARS_1MONTH")  # Stars за 1 месяц
-    subscription_stars_3months: int = Field(250, alias="SUBSCRIPTION_STARS_3MONTHS")  # Stars за 3 месяца
-    subscription_stars_6months: int = Field(450, alias="SUBSCRIPTION_STARS_6MONTHS")  # Stars за 6 месяцев
-    subscription_stars_12months: int = Field(800, alias="SUBSCRIPTION_STARS_12MONTHS")  # Stars за 12 месяцев
+    # ВАЖНО: Если переменные не найдены в .env, будут использованы дефолтные значения ниже
+    # Проверьте логи при запуске - там будет видно, откуда берутся значения
+    subscription_stars_1month: int = Field(
+        default=100, 
+        alias="SUBSCRIPTION_STARS_1MONTH",
+        description="Stars за 1 месяц (дефолт: 100, если не указано в .env)"
+    )
+    subscription_stars_3months: int = Field(
+        default=250, 
+        alias="SUBSCRIPTION_STARS_3MONTHS",
+        description="Stars за 3 месяца (дефолт: 250, если не указано в .env)"
+    )
+    subscription_stars_6months: int = Field(
+        default=450, 
+        alias="SUBSCRIPTION_STARS_6MONTHS",
+        description="Stars за 6 месяцев (дефолт: 450, если не указано в .env)"
+    )
+    subscription_stars_12months: int = Field(
+        default=800, 
+        alias="SUBSCRIPTION_STARS_12MONTHS",
+        description="Stars за 12 месяцев (дефолт: 800, если не указано в .env)"
+    )
     trial_days: int = Field(3, alias="TRIAL_DAYS")  # Дней пробной подписки
     # Дефолтные сквады для новых пользователей
     default_external_squad_uuid: str | None = Field(default=None, alias="DEFAULT_EXTERNAL_SQUAD_UUID")
@@ -199,4 +217,53 @@ def get_settings() -> Settings:
             if value is not None:
                 os.environ[key] = value
     
-    return Settings()
+    settings = Settings()
+    
+    # Логируем, откуда берутся значения (для отладки)
+    from src.utils.logger import logger
+    
+    # Проверяем цены подписок - сравниваем с дефолтными значениями
+    stars_vars = {
+        "SUBSCRIPTION_STARS_1MONTH": (settings.subscription_stars_1month, 100),
+        "SUBSCRIPTION_STARS_3MONTHS": (settings.subscription_stars_3months, 250),
+        "SUBSCRIPTION_STARS_6MONTHS": (settings.subscription_stars_6months, 450),
+        "SUBSCRIPTION_STARS_12MONTHS": (settings.subscription_stars_12months, 800),
+    }
+    
+    for var_name, (current_value, default_value) in stars_vars.items():
+        env_value = os.getenv(var_name)
+        if env_value:
+            try:
+                env_int = int(env_value)
+                if env_int == current_value:
+                    logger.info("✓ %s = %s (read from .env)", var_name, current_value)
+                else:
+                    logger.error(
+                        "❌ MISMATCH: %s in .env is %s, but Settings has %s. "
+                        "This means .env is NOT being read correctly!",
+                        var_name, env_int, current_value
+                    )
+            except ValueError:
+                logger.error("❌ Invalid value for %s in .env: %s (must be integer)", var_name, env_value)
+        else:
+            if current_value == default_value:
+                logger.warning(
+                    "⚠️ %s not found in .env, using DEFAULT value from config.py: %s",
+                    var_name, current_value
+                )
+            else:
+                logger.info("✓ %s = %s (from .env, not default)", var_name, current_value)
+    
+    # Проверяем сквады
+    internal_squads_env = os.getenv("DEFAULT_INTERNAL_SQUADS")
+    if internal_squads_env:
+        logger.debug("✓ DEFAULT_INTERNAL_SQUADS found in .env: %s", internal_squads_env)
+        logger.debug("  Parsed as: %s (type=%s, len=%s)", 
+                    settings.default_internal_squads,
+                    type(settings.default_internal_squads).__name__,
+                    len(settings.default_internal_squads) if settings.default_internal_squads else 0)
+    else:
+        logger.warning("⚠️ DEFAULT_INTERNAL_SQUADS not found in .env, using default: %s", 
+                      settings.default_internal_squads)
+    
+    return settings
