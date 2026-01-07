@@ -257,20 +257,22 @@ async def cb_subscription(callback: CallbackQuery) -> None:
                 url=subscription_url or _("user.no_url", locale=locale)
             )
             
-            keyboard_buttons = [[
-                InlineKeyboardButton(
-                    text=_("actions.back", locale=locale),
-                    callback_data="user:menu"
-                )
-            ]]
+            keyboard_buttons = []
             
             if subscription_url:
-                keyboard_buttons.insert(0, [
+                keyboard_buttons.append([
                     InlineKeyboardButton(
                         text=_("user.get_config", locale=locale),
                         url=subscription_url
                     )
                 ])
+            
+            keyboard_buttons.append([
+                InlineKeyboardButton(
+                    text=_("actions.back", locale=locale),
+                    callback_data="user:menu"
+                )
+            ])
             
             await callback.message.edit_text(
                 text,
