@@ -92,7 +92,8 @@ async def create_subscription_invoice(
         )
         
         logger.info(f"Invoice created for user {user_id}: {payment_id}, {stars} stars")
-        return invoice_link.invoice_link
+        # create_invoice_link возвращает строку URL
+        return str(invoice_link)
     except Exception as e:
         logger.exception(
             "Failed to create invoice for user %s: %s (payload=%r stars=%s months=%s promo=%r)",
