@@ -218,6 +218,16 @@ async def process_successful_payment(
                 # Подготавливаем сквады
                 internal_squads = settings.default_internal_squads if settings.default_internal_squads else None
                 
+                # Логируем, что передаем при создании пользователя
+                logger.info(
+                    "Creating payment user for %d: external_squad=%s, internal_squads=%s (type=%s, len=%s)",
+                    user_id,
+                    settings.default_external_squad_uuid,
+                    internal_squads,
+                    type(internal_squads).__name__ if internal_squads else "None",
+                    len(internal_squads) if internal_squads else 0
+                )
+                
                 user_data = await api_client.create_user(
                     username=username,
                     expire_at=expire_date,
@@ -255,10 +265,12 @@ async def process_successful_payment(
                     if update_payload:
                         await api_client.update_user(user_uuid, **update_payload)
                         logger.info(
-                            "Applied squads on payment user %s: external=%s, internal=%s",
+                            "Applied squads on payment user %s: external=%s, internal=%s (type=%s, len=%s)",
                             user_uuid,
                             settings.default_external_squad_uuid,
-                            internal_squads
+                            internal_squads,
+                            type(internal_squads).__name__ if internal_squads else "None",
+                            len(internal_squads) if internal_squads else 0
                         )
                 except Exception as squad_exc:
                     logger.warning("Failed to apply squads on payment user %s: %s", user_uuid, squad_exc)

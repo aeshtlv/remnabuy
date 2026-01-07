@@ -15,6 +15,23 @@ from src.utils.logger import logger
 router = Router(name="user_public")
 
 
+def _get_months_text(months: int, locale: str) -> str:
+    """Возвращает правильное склонение месяцев для русского языка."""
+    if locale == "ru":
+        if months == 1:
+            return "1 месяц"
+        elif months in (2, 3, 4):
+            return f"{months} месяца"
+        else:
+            return f"{months} месяцев"
+    else:
+        # Для английского
+        if months == 1:
+            return "1 month"
+        else:
+            return f"{months} months"
+
+
 def _get_user_menu_keyboard(user_id: int) -> InlineKeyboardMarkup:
     """Создает клавиатуру главного меню пользователя."""
     from src.utils.auth import is_admin
@@ -362,6 +379,16 @@ async def cb_trial_activate(callback: CallbackQuery) -> None:
         # Подготавливаем сквады
         internal_squads = settings.default_internal_squads if settings.default_internal_squads else None
         
+        # Логируем, что передаем
+        logger.info(
+            "Creating trial user for %d: external_squad=%s, internal_squads=%s (type=%s, len=%s)",
+            user_id,
+            settings.default_external_squad_uuid,
+            internal_squads,
+            type(internal_squads).__name__,
+            len(internal_squads) if internal_squads else 0
+        )
+        
         created = None
         username_try = base_username
         for attempt in range(3):
@@ -374,6 +401,7 @@ async def cb_trial_activate(callback: CallbackQuery) -> None:
                     external_squad_uuid=settings.default_external_squad_uuid,
                     active_internal_squads=internal_squads,
                 )
+                logger.info("Trial user created successfully: %s", created.get("response", {}).get("uuid", "unknown"))
                 break
             except Exception as e:
                 logger.warning(f"Trial activation attempt {attempt+1} failed for user {user_id}: {e}")
@@ -458,7 +486,7 @@ async def cb_promo_input(callback: CallbackQuery) -> None:
     i18n = get_i18n()
     with i18n.use_locale(locale):
         await callback.message.edit_text(
-            _("payment.enter_promo_code_text").format(months=subscription_months),
+            _("payment.enter_promo_code_text").format(months_text=_get_months_text(subscription_months, locale)),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton(
                     text=_("actions.cancel"),
@@ -666,29 +694,33 @@ async def cb_buy(callback: CallbackQuery) -> None:
     
     i18n = get_i18n()
     with i18n.use_locale(locale):
-        # Клавиатура с вариантами подписки
+        # Получаем актуальные цены из настроек
+        from src.config import get_settings
+        settings = get_settings()
+        
+        # Клавиатура с вариантами подписки и ценами
         buttons = [
             [
                 InlineKeyboardButton(
-                    text=_("payment.subscription_1month"),
+                    text=_("payment.subscription_1month").format(stars=settings.subscription_stars_1month),
                     callback_data="buy:1"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text=_("payment.subscription_3months"),
+                    text=_("payment.subscription_3months").format(stars=settings.subscription_stars_3months),
                     callback_data="buy:3"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text=_("payment.subscription_6months"),
+                    text=_("payment.subscription_6months").format(stars=settings.subscription_stars_6months),
                     callback_data="buy:6"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text=_("payment.subscription_12months"),
+                    text=_("payment.subscription_12months").format(stars=settings.subscription_stars_12months),
                     callback_data="buy:12"
                 )
             ],
@@ -831,7 +863,7 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                 
                 await callback.message.edit_text(
                     _("payment.promo_code_prompt").format(
-                        months=subscription_months,
+                        months_text=_get_months_text(subscription_months, locale),
                         stars=stars_price
                     ),
                     reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
