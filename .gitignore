@@ -5,3 +5,10 @@ __pycache__/
 dist/
 .DS_Store
 *.log
+*.pyc
+*.pyo
+.idea/
+.vscode/
+*.db
+*.sqlite
+*.sqlite3
