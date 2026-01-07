@@ -1,4 +1,5 @@
 import os
+import logging
 from pathlib import Path
 from typing import List
 
@@ -220,7 +221,8 @@ def get_settings() -> Settings:
     settings = Settings()
     
     # Логируем, откуда берутся значения (для отладки)
-    from src.utils.logger import logger
+    # ВАЖНО: не импортируем src.utils.logger здесь, иначе будет циклический импорт
+    logger = logging.getLogger("remnabuy-config")
     
     # Проверяем цены подписок - сравниваем с дефолтными значениями
     stars_vars = {
