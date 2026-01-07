@@ -195,24 +195,30 @@ async def process_successful_payment(
             except Exception as e:
                 logger.error(f"Failed to update user {remnawave_uuid}: {e}")
                 # Создаем нового пользователя
+                # Подготавливаем сквады
+                internal_squads = settings.default_internal_squads if settings.default_internal_squads else None
+                
                 user_data = await api_client.create_user(
                     username=username,
                     expire_at=expire_date,
                     telegram_id=user_id,
                     external_squad_uuid=settings.default_external_squad_uuid,
-                    active_internal_squads=settings.default_internal_squads or None,
+                    active_internal_squads=internal_squads,
                 )
                 user_info = user_data.get("response", user_data)
                 user_uuid = user_info.get("uuid")
                 BotUser.set_remnawave_uuid(user_id, user_uuid)
         else:
             # Создаем нового пользователя
+            # Подготавливаем сквады
+            internal_squads = settings.default_internal_squads if settings.default_internal_squads else None
+            
             user_data = await api_client.create_user(
                 username=username,
                 expire_at=expire_date,
                 telegram_id=user_id,
                 external_squad_uuid=settings.default_external_squad_uuid,
-                active_internal_squads=settings.default_internal_squads or None,
+                active_internal_squads=internal_squads,
             )
             user_info = user_data.get("response", user_data)
             user_uuid = user_info.get("uuid")

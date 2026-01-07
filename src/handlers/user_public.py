@@ -277,9 +277,16 @@ async def cb_subscription(callback: CallbackQuery) -> None:
                 ]])
             )
         except Exception as e:
-            logger.exception("Error getting subscription info")
+            logger.exception(f"Error getting subscription info for user {user_id}, uuid {remnawave_uuid}: {e}")
+            error_msg = str(e)
+            # Более информативное сообщение об ошибке
+            if "404" in error_msg or "not found" in error_msg.lower():
+                error_text = _("user.subscription_not_found", locale=locale)
+            else:
+                error_text = _("errors.generic", locale=locale) + f"\n\nОшибка: {error_msg[:100]}"
+            
             await callback.message.edit_text(
-                _("errors.generic", locale=locale),
+                error_text,
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                     InlineKeyboardButton(
                         text=_("actions.back", locale=locale),
@@ -358,6 +365,9 @@ async def cb_trial_activate(callback: CallbackQuery) -> None:
 
         expire_at = (datetime.utcnow() + timedelta(days=trial_days)).replace(microsecond=0).isoformat() + "Z"
 
+        # Подготавливаем сквады
+        internal_squads = settings.default_internal_squads if settings.default_internal_squads else None
+        
         created = None
         username_try = base_username
         for attempt in range(3):
@@ -368,10 +378,11 @@ async def cb_trial_activate(callback: CallbackQuery) -> None:
                     telegram_id=user_id,
                     description="trial",
                     external_squad_uuid=settings.default_external_squad_uuid,
-                    active_internal_squads=settings.default_internal_squads or None,
+                    active_internal_squads=internal_squads,
                 )
                 break
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Trial activation attempt {attempt+1} failed for user {user_id}: {e}")
                 # возможно конфликт username — добавим суффикс
                 username_try = f"{base_username}_{attempt+1}"
                 continue
