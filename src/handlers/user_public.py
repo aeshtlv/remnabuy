@@ -38,32 +38,26 @@ def _get_user_menu_keyboard(user_id: int) -> InlineKeyboardMarkup:
     buttons = [
         [
             InlineKeyboardButton(
-                text=_("user_menu.subscription"),
-                callback_data="user:subscription"
+                text=_("user_menu.connect"),
+                callback_data="user:connect"
             )
         ],
         [
             InlineKeyboardButton(
-                text=_("user_menu.buy_subscription"),
-                callback_data="user:buy"
+                text=_("user_menu.my_access"),
+                callback_data="user:my_access"
             )
         ],
         [
             InlineKeyboardButton(
-                text=_("user_menu.trial"),
-                callback_data="user:trial"
+                text=_("user_menu.settings"),
+                callback_data="user:settings"
             )
         ],
         [
             InlineKeyboardButton(
-                text=_("user_menu.referral"),
-                callback_data="user:referral"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text=_("user_menu.language"),
-                callback_data="user:language"
+                text=_("user_menu.support"),
+                callback_data="user:support"
             )
         ]
     ]
@@ -149,8 +143,10 @@ async def cb_user_menu(callback: CallbackQuery) -> None:
     
     i18n = get_i18n()
     with i18n.use_locale(locale):
+        # Показываем приветственный текст как при /start
+        welcome_text = _("user.welcome")
         await callback.message.edit_text(
-            _("user_menu.title"),
+            welcome_text,
             reply_markup=_get_user_menu_keyboard(user_id)
         )
 
@@ -165,9 +161,21 @@ async def cb_language(callback: CallbackQuery) -> None:
     
     i18n = get_i18n()
     with i18n.use_locale(locale):
+        buttons = [
+            [
+                InlineKeyboardButton(text="🇷🇺 Русский", callback_data="lang:ru"),
+                InlineKeyboardButton(text="🇬🇧 English", callback_data="lang:en")
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("user_menu.back"),
+                    callback_data="user:settings"
+                )
+            ]
+        ]
         await callback.message.edit_text(
             _("user.choose_language"),
-            reply_markup=_get_language_keyboard()
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
         )
 
 
@@ -182,9 +190,271 @@ async def cb_set_language(callback: CallbackQuery) -> None:
     
     i18n = get_i18n()
     with i18n.use_locale(language):
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    text=_("settings.language"),
+                    callback_data="user:language"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("settings.referral"),
+                    callback_data="user:referral"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("user_menu.back"),
+                    callback_data="user:menu"
+                )
+            ]
+        ]
         await callback.message.edit_text(
             _("user.language_changed"),
-            reply_markup=_get_user_menu_keyboard(user_id)
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+        )
+
+
+@router.callback_query(F.data == "user:connect")
+async def cb_connect(callback: CallbackQuery) -> None:
+    """Обработчик 'Подключить доступ'."""
+    await callback.answer()
+    user_id = callback.from_user.id
+    user = BotUser.get_or_create(user_id, callback.from_user.username)
+    locale = user.get("language", "ru")
+    
+    i18n = get_i18n()
+    with i18n.use_locale(locale):
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    text=_("connect.buy_subscription"),
+                    callback_data="user:buy"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("connect.trial"),
+                    callback_data="user:trial"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("user_menu.back"),
+                    callback_data="user:menu"
+                )
+            ]
+        ]
+        await callback.message.edit_text(
+            _("connect.title"),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+        )
+
+
+@router.callback_query(F.data == "user:my_access")
+async def cb_my_access(callback: CallbackQuery) -> None:
+    """Обработчик 'Мой доступ' - показывает статус подписки."""
+    await callback.answer()
+    user_id = callback.from_user.id
+    user = BotUser.get_or_create(user_id, callback.from_user.username)
+    locale = user.get("language", "ru")
+    
+    i18n = get_i18n()
+    with i18n.use_locale(locale):
+        # Показываем сообщение "Проверяем статус доступа…"
+        await callback.message.edit_text(_("my_access.checking_status"))
+        
+        remnawave_uuid = user.get("remnawave_user_uuid")
+        
+        if not remnawave_uuid:
+            buttons = [
+                [
+                    InlineKeyboardButton(
+                        text=_("user_menu.connect"),
+                        callback_data="user:connect"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text=_("user_menu.back"),
+                        callback_data="user:menu"
+                    )
+                ]
+            ]
+            await callback.message.edit_text(
+                _("my_access.no_access"),
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+            )
+            return
+        
+        try:
+            # Получаем информацию о пользователе из Remnawave
+            user_data = await api_client.get_user_by_uuid(remnawave_uuid)
+            info = user_data.get("response", user_data)
+            
+            # Получаем подписку
+            short_uuid = info.get("shortUuid")
+            subscription_url = ""
+            if short_uuid:
+                try:
+                    sub_info = await api_client.get_subscription_info(short_uuid)
+                    sub_data = sub_info.get("response", sub_info)
+                    subscription_url = sub_data.get("subscriptionUrl", "")
+                except:
+                    pass
+            
+            # Формируем текст
+            status = info.get("status", "UNKNOWN")
+            expire_at = info.get("expireAt")
+            traffic_used = info.get("trafficUsed", 0)
+            traffic_limit = info.get("trafficLimit", 0)
+            
+            status_text = {
+                "ACTIVE": _("my_access.status_active", locale=locale),
+                "DISABLED": _("my_access.status_disabled", locale=locale),
+                "LIMITED": _("my_access.status_limited", locale=locale),
+                "EXPIRED": _("my_access.status_expired", locale=locale),
+            }.get(status, status)
+            
+            expire_text = ""
+            if expire_at:
+                try:
+                    expire_dt = datetime.fromisoformat(expire_at.replace("Z", "+00:00"))
+                    expire_text = expire_dt.strftime("%d.%m.%Y %H:%M")
+                except:
+                    expire_text = expire_at
+            
+            from src.utils.formatters import format_bytes
+            traffic_text = f"{format_bytes(traffic_used)} / {format_bytes(traffic_limit)}"
+            
+            text = _("user.subscription_info", locale=locale).format(
+                status=status_text,
+                expire=expire_text or _("user.no_expire", locale=locale),
+                traffic=traffic_text,
+                url=subscription_url or _("user.no_url", locale=locale)
+            )
+            
+            keyboard_buttons = []
+            
+            if subscription_url:
+                keyboard_buttons.append([
+                    InlineKeyboardButton(
+                        text=_("user.get_config", locale=locale),
+                        url=subscription_url
+                    )
+                ])
+            
+            keyboard_buttons.append([
+                InlineKeyboardButton(
+                    text=_("user_menu.back", locale=locale),
+                    callback_data="user:menu"
+                )
+            ])
+            
+            await callback.message.edit_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard_buttons),
+                parse_mode="HTML"
+            )
+        except NotFoundError:
+            buttons = [
+                [
+                    InlineKeyboardButton(
+                        text=_("user_menu.connect", locale=locale),
+                        callback_data="user:connect"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text=_("user_menu.back", locale=locale),
+                        callback_data="user:menu"
+                    )
+                ]
+            ]
+            await callback.message.edit_text(
+                _("my_access.no_access", locale=locale),
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+            )
+        except Exception as e:
+            logger.exception(f"Error getting subscription info for user {user_id}, uuid {remnawave_uuid}: {e}")
+            error_msg = str(e)
+            if "404" in error_msg or "not found" in error_msg.lower():
+                error_text = _("my_access.no_access", locale=locale)
+            else:
+                error_text = _("errors.generic", locale=locale) + f"\n\nОшибка: {error_msg[:100]}"
+            
+            buttons = [
+                [
+                    InlineKeyboardButton(
+                        text=_("user_menu.back", locale=locale),
+                        callback_data="user:menu"
+                    )
+                ]
+            ]
+            await callback.message.edit_text(
+                error_text,
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+            )
+
+
+@router.callback_query(F.data == "user:settings")
+async def cb_settings(callback: CallbackQuery) -> None:
+    """Обработчик 'Настройки'."""
+    await callback.answer()
+    user_id = callback.from_user.id
+    user = BotUser.get_or_create(user_id, callback.from_user.username)
+    locale = user.get("language", "ru")
+    
+    i18n = get_i18n()
+    with i18n.use_locale(locale):
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    text=_("settings.language"),
+                    callback_data="user:language"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("settings.referral"),
+                    callback_data="user:referral"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("user_menu.back"),
+                    callback_data="user:menu"
+                )
+            ]
+        ]
+        await callback.message.edit_text(
+            _("settings.title"),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+        )
+
+
+@router.callback_query(F.data == "user:support")
+async def cb_support(callback: CallbackQuery) -> None:
+    """Обработчик 'Поддержка'."""
+    await callback.answer()
+    user_id = callback.from_user.id
+    user = BotUser.get_or_create(user_id, callback.from_user.username)
+    locale = user.get("language", "ru")
+    
+    i18n = get_i18n()
+    with i18n.use_locale(locale):
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    text=_("user_menu.back"),
+                    callback_data="user:menu"
+                )
+            ]
+        ]
+        await callback.message.edit_text(
+            _("support.title"),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
         )
 
 
@@ -205,7 +475,7 @@ async def cb_subscription(callback: CallbackQuery) -> None:
                 _("user.no_subscription"),
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                     InlineKeyboardButton(
-                        text=_("actions.back", locale=locale),
+                        text=_("user_menu.back", locale=locale),
                         callback_data="user:menu"
                     )
                 ]])
@@ -269,7 +539,7 @@ async def cb_subscription(callback: CallbackQuery) -> None:
             
             keyboard_buttons.append([
                 InlineKeyboardButton(
-                    text=_("actions.back", locale=locale),
+                    text=_("user_menu.back", locale=locale),
                     callback_data="user:menu"
                 )
             ])
@@ -284,7 +554,7 @@ async def cb_subscription(callback: CallbackQuery) -> None:
                 _("user.subscription_not_found", locale=locale),
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                     InlineKeyboardButton(
-                        text=_("actions.back", locale=locale),
+                        text=_("user_menu.back", locale=locale),
                         callback_data="user:menu"
                     )
                 ]])
@@ -302,7 +572,7 @@ async def cb_subscription(callback: CallbackQuery) -> None:
                 error_text,
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                     InlineKeyboardButton(
-                        text=_("actions.back", locale=locale),
+                        text=_("user_menu.back", locale=locale),
                         callback_data="user:menu"
                     )
                 ]])
@@ -324,7 +594,7 @@ async def cb_trial(callback: CallbackQuery) -> None:
                 _("user.trial_already_used"),
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                     InlineKeyboardButton(
-                        text=_("actions.back"),
+                        text=_("user_menu.back"),
                         callback_data="user:menu"
                     )
                 ]])
@@ -341,8 +611,8 @@ async def cb_trial(callback: CallbackQuery) -> None:
                 )
             ], [
                 InlineKeyboardButton(
-                    text=_("actions.back"),
-                    callback_data="user:menu"
+                    text=_("user_menu.back"),
+                    callback_data="user:connect"
                 )
             ]])
         )
@@ -359,11 +629,14 @@ async def cb_trial_activate(callback: CallbackQuery) -> None:
     i18n = get_i18n()
     with i18n.use_locale(locale):
         if user.get("trial_used") or user.get("remnawave_user_uuid"):
+            buttons = [
+                [
+                    InlineKeyboardButton(text=_("user_menu.back"), callback_data="user:connect")
+                ]
+            ]
             await callback.message.edit_text(
                 _("user.trial_already_used"),
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                    InlineKeyboardButton(text=_("actions.back"), callback_data="user:menu")
-                ]]),
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
             )
             return
 
@@ -412,11 +685,14 @@ async def cb_trial_activate(callback: CallbackQuery) -> None:
                 continue
 
         if not created:
+            buttons = [
+                [
+                    InlineKeyboardButton(text=_("user_menu.back"), callback_data="user:connect")
+                ]
+            ]
             await callback.message.edit_text(
                 _("user.trial_activation_failed"),
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                    InlineKeyboardButton(text=_("actions.back"), callback_data="user:menu")
-                ]]),
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
             )
             return
 
@@ -492,7 +768,7 @@ async def cb_trial_activate(callback: CallbackQuery) -> None:
         buttons: list[list[InlineKeyboardButton]] = []
         if subscription_url:
             buttons.append([InlineKeyboardButton(text=_("user.get_config"), url=subscription_url)])
-        buttons.append([InlineKeyboardButton(text=_("actions.back"), callback_data="user:menu")])
+        buttons.append([InlineKeyboardButton(text=_("user_menu.back"), callback_data="user:connect")])
 
         await callback.message.edit_text(
             _("user.trial_activated").format(days=trial_days),
@@ -564,7 +840,7 @@ async def handle_promo_code(message: Message) -> None:
                 error or _("user.promo_invalid"),
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                     InlineKeyboardButton(
-                        text=_("actions.back"),
+                        text=_("user_menu.back"),
                         callback_data=f"buy:{subscription_months}"
                     )
                 ]])
@@ -599,8 +875,8 @@ async def handle_promo_code(message: Message) -> None:
                 ],
                 [
                     InlineKeyboardButton(
-                        text=_("actions.back"),
-                        callback_data="user:buy"
+                        text=_("user_menu.back"),
+                        callback_data="user:connect"
                     )
                 ]
             ]
@@ -615,7 +891,7 @@ async def handle_promo_code(message: Message) -> None:
                 _("payment.error_creating_invoice"),
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                     InlineKeyboardButton(
-                        text=_("actions.back"),
+                        text=_("user_menu.back"),
                         callback_data=f"buy:{subscription_months}"
                     )
                 ]])
@@ -661,7 +937,7 @@ async def cb_apply_promo(callback: CallbackQuery) -> None:
             ],
             [
                 InlineKeyboardButton(
-                    text=_("actions.back", locale=locale),
+                    text=_("user_menu.back", locale=locale),
                     callback_data="user:buy"
                 )
             ]
@@ -722,8 +998,8 @@ async def cb_referral(callback: CallbackQuery) -> None:
             ],
             [
                 InlineKeyboardButton(
-                    text=_("actions.back", locale=locale),
-                    callback_data="user:menu"
+                    text=_("user_menu.back", locale=locale),
+                    callback_data="user:settings"
                 )
             ]
         ]
@@ -776,8 +1052,8 @@ async def cb_buy(callback: CallbackQuery) -> None:
             ],
             [
                 InlineKeyboardButton(
-                    text=_("actions.back"),
-                    callback_data="user:menu"
+                    text=_("user_menu.back"),
+                    callback_data="user:connect"
                 )
             ]
         ]
@@ -823,7 +1099,7 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                     ],
                     [
                         InlineKeyboardButton(
-                            text=_("actions.back"),
+                            text=_("user_menu.back"),
                             callback_data="user:buy"
                         )
                     ]
@@ -856,7 +1132,7 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                     ],
                     [
                         InlineKeyboardButton(
-                            text=_("actions.back"),
+                            text=_("user_menu.back"),
                             callback_data="user:buy"
                         )
                     ]
@@ -905,7 +1181,7 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                     ],
                     [
                         InlineKeyboardButton(
-                            text=_("actions.back"),
+                            text=_("user_menu.back"),
                             callback_data="user:buy"
                         )
                     ]
@@ -926,8 +1202,8 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                 _("payment.error_creating_invoice", locale=locale),
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                     InlineKeyboardButton(
-                        text=_("actions.back", locale=locale),
-                        callback_data="user:buy"
+                        text=_("user_menu.back", locale=locale),
+                        callback_data="user:connect"
                     )
                 ]])
             )
@@ -939,8 +1215,8 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                 _("payment.error_creating_invoice"),
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                     InlineKeyboardButton(
-                        text=_("actions.back"),
-                        callback_data="user:buy"
+                        text=_("user_menu.back"),
+                        callback_data="user:connect"
                     )
                 ]])
             )

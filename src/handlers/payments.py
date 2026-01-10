@@ -84,13 +84,19 @@ async def process_successful_payment_message(message: Message) -> None:
             
             if result.get("success"):
                 if result.get("already_completed"):
-                    text = _("payment.already_processed")
+                    # Если уже обработан, просто показываем "Мой доступ"
                     buttons = [[
                         InlineKeyboardButton(
-                            text=_("user_menu.subscription"),
-                            callback_data="user:subscription"
+                            text=_("user_menu.my_access"),
+                            callback_data="user:my_access"
                         )
                     ]]
+                    await message.answer(
+                        _("payment.already_processed"),
+                        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+                        parse_mode="HTML"
+                    )
+                    return
                 else:
                     subscription_url = result.get("subscription_url", "")
                     expire_date = result.get("expire_date", "")
@@ -105,9 +111,10 @@ async def process_successful_payment_message(message: Message) -> None:
                             text=_("user.get_config"),
                             url=subscription_url
                         )])
+                    # После оплаты автоматически ведем в "Мой доступ"
                     buttons.append([InlineKeyboardButton(
-                        text=_("payment.view_subscription"),
-                        callback_data="user:subscription"
+                        text=_("user_menu.my_access"),
+                        callback_data="user:my_access"
                     )])
                     
                     await message.answer(
@@ -125,7 +132,7 @@ async def process_successful_payment_message(message: Message) -> None:
                 
                 buttons = [[
                     InlineKeyboardButton(
-                        text=_("actions.back"),
+                        text=_("user_menu.back"),
                         callback_data="user:menu"
                     )
                 ]]

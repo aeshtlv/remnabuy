@@ -592,17 +592,39 @@
   "hwid.unlimited": "Unlimited",
   "user_menu": {
     "title": "👋 Welcome!\n\nChoose an action:",
-    "subscription": "📋 My subscription",
-    "buy_subscription": "💳 Buy subscription",
-    "trial": "🎁 Trial subscription",
-    "promo_code": "🎫 Promo code",
-    "referral": "👥 Referral program",
-    "language": "🌐 Language",
+    "connect": "🌐 Connect access",
+    "my_access": "📊 My access",
+    "settings": "⚙️ Settings",
+    "support": "🆘 Support",
+    "back": "🔙 Back",
     "admin_panel": "⚙️ Admin"
   },
+  "connect": {
+    "title": "🌐 Connect access\n\nChoose connection method:",
+    "buy_subscription": "💳 Buy subscription",
+    "trial": "🎁 Trial subscription",
+    "checking_status": "⏳ Checking access status…"
+  },
+  "my_access": {
+    "title": "📊 My access",
+    "checking_status": "⏳ Checking access status…",
+    "no_access": "⚠️ You don't have active access.\n\nUse \"Connect access\" to activate.",
+    "status_active": "✅ Access active",
+    "status_disabled": "❌ Access disabled",
+    "status_limited": "🟠 Access limited",
+    "status_expired": "⏰ Access expired"
+  },
+  "settings": {
+    "title": "⚙️ Settings\n\nSelect setting:",
+    "language": "🌐 Language",
+    "referral": "👥 Referral program"
+  },
+  "support": {
+    "title": "🆘 Support\n\nIf you have any questions, please contact our support service.\n\nWe will respond to you as soon as possible."
+  },
   "user": {
-    "welcome": "👋 Welcome! Choose an action from the menu below.",
-    "welcome_with_referral": "👋 Welcome! You registered using a referral link.",
+    "welcome": "🔒 shftsecure\n\nSecure internet connection service for everyday use.\n\nHelps ensure connection stability and data protection when working online.\n\nChoose an action below 👇",
+    "welcome_with_referral": "🔒 shftsecure\n\nSecure internet connection service for everyday use.\n\nHelps ensure connection stability and data protection when working online.\n\nYou registered using a referral link.\n\nChoose an action below 👇",
     "choose_language": "🌐 Choose language:",
     "language_changed": "✅ Language changed to English.",
     "no_subscription": "⚠️ You don't have an active subscription yet.\n\nYou can:\n• Activate trial subscription\n• Buy subscription",
