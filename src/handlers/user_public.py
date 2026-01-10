@@ -36,24 +36,25 @@ def _get_user_menu_keyboard(user_id: int) -> InlineKeyboardMarkup:
     """Создает клавиатуру главного меню пользователя."""
     from src.utils.auth import is_admin
     buttons = [
+        # 1️⃣ Подключить доступ — главное действие → отдельная строка
         [
             InlineKeyboardButton(
                 text=_("user_menu.connect"),
                 callback_data="user:connect"
             )
         ],
+        # 2️⃣ Мой доступ / Настройки — вторичные → в одной строке
         [
             InlineKeyboardButton(
                 text=_("user_menu.my_access"),
                 callback_data="user:my_access"
-            )
-        ],
-        [
+            ),
             InlineKeyboardButton(
                 text=_("user_menu.settings"),
                 callback_data="user:settings"
             )
         ],
+        # 3️⃣ Поддержка — редко → отдельно
         [
             InlineKeyboardButton(
                 text=_("user_menu.support"),
@@ -61,6 +62,7 @@ def _get_user_menu_keyboard(user_id: int) -> InlineKeyboardMarkup:
             )
         ]
     ]
+    # 4️⃣ Админка — только для админа, отдельно
     if is_admin(user_id):
         buttons.append([
             InlineKeyboardButton(
