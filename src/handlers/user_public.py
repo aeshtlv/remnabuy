@@ -425,6 +425,12 @@ async def cb_settings(callback: CallbackQuery) -> None:
             ],
             [
                 InlineKeyboardButton(
+                    text=_("settings.documents"),
+                    callback_data="user:documents"
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text=_("user_menu.back"),
                     callback_data="user:menu"
                 )
@@ -457,6 +463,123 @@ async def cb_support(callback: CallbackQuery) -> None:
         await callback.message.edit_text(
             _("support.title"),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+        )
+
+
+@router.callback_query(F.data == "user:documents")
+async def cb_documents(callback: CallbackQuery) -> None:
+    """Обработчик 'Документы'."""
+    await callback.answer()
+    user_id = callback.from_user.id
+    user = BotUser.get_or_create(user_id, callback.from_user.username)
+    locale = user.get("language", "ru")
+    
+    i18n = get_i18n()
+    with i18n.use_locale(locale):
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    text=_("documents.privacy"),
+                    callback_data="user:documents:privacy"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("documents.offer"),
+                    callback_data="user:documents:offer"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("documents.rules"),
+                    callback_data="user:documents:rules"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("user_menu.back"),
+                    callback_data="user:settings"
+                )
+            ]
+        ]
+        await callback.message.edit_text(
+            _("documents.title"),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+        )
+
+
+@router.callback_query(F.data == "user:documents:privacy")
+async def cb_documents_privacy(callback: CallbackQuery) -> None:
+    """Обработчик 'Политика конфиденциальности'."""
+    await callback.answer()
+    user_id = callback.from_user.id
+    user = BotUser.get_or_create(user_id, callback.from_user.username)
+    locale = user.get("language", "ru")
+    
+    i18n = get_i18n()
+    with i18n.use_locale(locale):
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    text=_("user_menu.back"),
+                    callback_data="user:documents"
+                )
+            ]
+        ]
+        await callback.message.edit_text(
+            _("documents.privacy_content"),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+            parse_mode="HTML"
+        )
+
+
+@router.callback_query(F.data == "user:documents:offer")
+async def cb_documents_offer(callback: CallbackQuery) -> None:
+    """Обработчик 'Публичная оферта'."""
+    await callback.answer()
+    user_id = callback.from_user.id
+    user = BotUser.get_or_create(user_id, callback.from_user.username)
+    locale = user.get("language", "ru")
+    
+    i18n = get_i18n()
+    with i18n.use_locale(locale):
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    text=_("user_menu.back"),
+                    callback_data="user:documents"
+                )
+            ]
+        ]
+        await callback.message.edit_text(
+            _("documents.offer_content"),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+            parse_mode="HTML"
+        )
+
+
+@router.callback_query(F.data == "user:documents:rules")
+async def cb_documents_rules(callback: CallbackQuery) -> None:
+    """Обработчик 'Правила использования сервиса'."""
+    await callback.answer()
+    user_id = callback.from_user.id
+    user = BotUser.get_or_create(user_id, callback.from_user.username)
+    locale = user.get("language", "ru")
+    
+    i18n = get_i18n()
+    with i18n.use_locale(locale):
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    text=_("user_menu.back"),
+                    callback_data="user:documents"
+                )
+            ]
+        ]
+        await callback.message.edit_text(
+            _("documents.rules_content"),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+            parse_mode="HTML"
         )
 
 
