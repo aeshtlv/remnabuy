@@ -618,7 +618,15 @@
     "title": "⚙️ Settings\n\nSelect setting:",
     "language": "🌐 Language",
     "referral": "👥 Referral program",
-    "documents": "📄 Documents"
+    "documents": "📄 Documents",
+    "auto_renewal": "🔔 Auto renewal",
+    "auto_renewal_on": "🔔 Auto renewal: ON",
+    "auto_renewal_off": "🔔 Auto renewal: OFF",
+    "auto_renewal_enabled": "✅ Auto renewal enabled",
+    "auto_renewal_disabled": "❌ Auto renewal disabled",
+    "auto_renewal_description": "📌 We will remind you and prepare payment in advance.\n\nFunds are charged only after confirmation.",
+    "auto_renewal_info": "ℹ️ About auto renewal",
+    "auto_renewal_full_info": "🔔 Auto Renewal\n\nStatus: {status}\n\n📌 We will remind you and prepare payment in advance.\n\nFunds are charged only after confirmation.\n\n⏰ Reminders are sent:\n• 3-5 days before subscription expiration\n• 1 day before expiration\n• After expiration (if subscription is not renewed)"
   },
   "documents": {
     "title": "📄 Documents\n\nSelect document:",
@@ -685,5 +693,15 @@
     "error_processing": "An error occurred while processing the payment.",
     "contact_support": "Please contact support if the payment was deducted.",
     "unknown": "Unknown"
+  },
+  "renewal": {
+    "expiring_soon": "⏰ Access expires in {days} days\n\nClick the button below to renew access without losing settings.",
+    "expiring_tomorrow": "⏰ Access expires tomorrow\n\nClick the button below to renew access without losing settings.",
+    "access_suspended": "⚠️ Access suspended\n\nYour subscription has expired. Click the button below to resume access.",
+    "renew_button": "🔁 Renew access",
+    "resume_access_button": "🔁 Resume access",
+    "invoice_created": "💳 Renewal invoice created\n\nClick the button below to pay for subscription renewal via Telegram Stars.",
+    "error_creating_invoice": "❌ Error creating renewal invoice. Please try again later.",
+    "resume_access": "⚠️ Access suspended\n\nYour subscription has expired. Select a subscription to resume access:"
   }
 }

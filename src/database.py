@@ -39,9 +39,22 @@ def init_database():
                 trial_used BOOLEAN DEFAULT 0,
                 referrer_id INTEGER,
                 remnawave_user_uuid TEXT,
+                auto_renewal BOOLEAN DEFAULT 0,
+                last_renewal_notification TIMESTAMP,
                 FOREIGN KEY (referrer_id) REFERENCES bot_users(telegram_id)
             )
         """)
+        
+        # Миграция: добавляем поля автопродления, если их нет
+        try:
+            cursor.execute("ALTER TABLE bot_users ADD COLUMN auto_renewal BOOLEAN DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass  # Колонка уже существует
+        
+        try:
+            cursor.execute("ALTER TABLE bot_users ADD COLUMN last_renewal_notification TIMESTAMP")
+        except sqlite3.OperationalError:
+            pass  # Колонка уже существует
         
         # Таблица промокодов
         cursor.execute("""
@@ -165,6 +178,49 @@ class BotUser:
                 "UPDATE bot_users SET remnawave_user_uuid = ? WHERE telegram_id = ?",
                 (uuid, telegram_id)
             )
+    
+    @staticmethod
+    def set_auto_renewal(telegram_id: int, enabled: bool):
+        """Включает или выключает автопродление."""
+        with get_db_connection() as conn:
+            conn.execute(
+                "UPDATE bot_users SET auto_renewal = ? WHERE telegram_id = ?",
+                (1 if enabled else 0, telegram_id)
+            )
+    
+    @staticmethod
+    def get_auto_renewal(telegram_id: int) -> bool:
+        """Получает статус автопродления."""
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT auto_renewal FROM bot_users WHERE telegram_id = ?",
+                (telegram_id,)
+            )
+            row = cursor.fetchone()
+            return bool(row[0]) if row and row[0] is not None else False
+    
+    @staticmethod
+    def update_last_renewal_notification(telegram_id: int):
+        """Обновляет время последнего напоминания об автопродлении."""
+        with get_db_connection() as conn:
+            conn.execute(
+                "UPDATE bot_users SET last_renewal_notification = ? WHERE telegram_id = ?",
+                (datetime.now().isoformat(), telegram_id)
+            )
+    
+    @staticmethod
+    def get_users_with_auto_renewal():
+        """Получает всех пользователей с включенным автопродлением."""
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT telegram_id, username, remnawave_user_uuid, auto_renewal, last_renewal_notification
+                FROM bot_users
+                WHERE remnawave_user_uuid IS NOT NULL AND auto_renewal = 1
+            """)
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
 
 
 class PromoCode:
@@ -289,6 +345,16 @@ class Referral:
                 WHERE referrer_id = ? AND referred_id = ?
             """, (bonus_days, datetime.now().isoformat(), referrer_id, referred_id))
             return conn.total_changes > 0
+    
+    @staticmethod
+    def update_bonus_days(referrer_id: int, referred_id: int, bonus_days: int):
+        """Обновляет количество бонусных дней за реферала."""
+        with get_db_connection() as conn:
+            conn.execute("""
+                UPDATE referrals 
+                SET bonus_days = ?
+                WHERE referrer_id = ? AND referred_id = ?
+            """, (bonus_days, referrer_id, referred_id))
 
 
 class Payment:

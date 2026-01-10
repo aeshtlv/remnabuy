@@ -120,8 +120,21 @@ async def main() -> None:
     register_handlers(dp)
     dp.shutdown.register(api_client.close)
 
+    # Запускаем фоновую задачу для проверки автопродления
+    from src.services.renewal_service import start_renewal_checker
+    renewal_task = asyncio.create_task(start_renewal_checker(bot, interval_hours=6))
+    logger.info("🔄 Renewal checker started (interval: 6 hours)")
+
     logger.info("Starting bot")
-    await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+    try:
+        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+    finally:
+        # Отменяем фоновую задачу при остановке
+        renewal_task.cancel()
+        try:
+            await renewal_task
+        except asyncio.CancelledError:
+            logger.info("🔄 Renewal checker stopped")
 
 
 if __name__ == "__main__":

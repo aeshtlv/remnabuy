@@ -407,10 +407,20 @@ async def cb_settings(callback: CallbackQuery) -> None:
     user_id = callback.from_user.id
     user = BotUser.get_or_create(user_id, callback.from_user.username)
     locale = user.get("language", "ru")
+    auto_renewal = BotUser.get_auto_renewal(user_id)
     
     i18n = get_i18n()
     with i18n.use_locale(locale):
+        # Определяем текст для кнопки автопродления
+        auto_renewal_text = _("settings.auto_renewal_on") if auto_renewal else _("settings.auto_renewal_off")
+        
         buttons = [
+            [
+                InlineKeyboardButton(
+                    text=auto_renewal_text,
+                    callback_data="user:auto_renewal"
+                )
+            ],
             [
                 InlineKeyboardButton(
                     text=_("settings.language"),
@@ -1082,6 +1092,92 @@ async def cb_apply_promo(callback: CallbackQuery) -> None:
         )
 
 
+@router.callback_query(F.data == "user:auto_renewal")
+async def cb_auto_renewal(callback: CallbackQuery) -> None:
+    """Обработчик настройки автопродления."""
+    await callback.answer()
+    user_id = callback.from_user.id
+    user = BotUser.get_or_create(user_id, callback.from_user.username)
+    locale = user.get("language", "ru")
+    
+    i18n = get_i18n()
+    with i18n.use_locale(locale):
+        current_status = BotUser.get_auto_renewal(user_id)
+        
+        if current_status:
+            # Выключаем автопродление
+            BotUser.set_auto_renewal(user_id, False)
+            status_text = _("settings.auto_renewal_disabled")
+        else:
+            # Включаем автопродление
+            BotUser.set_auto_renewal(user_id, True)
+            status_text = _("settings.auto_renewal_enabled")
+        
+        auto_renewal = BotUser.get_auto_renewal(user_id)
+        auto_renewal_text = _("settings.auto_renewal_on") if auto_renewal else _("settings.auto_renewal_off")
+        
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    text=_("settings.auto_renewal_info"),
+                    callback_data="user:auto_renewal:info"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=auto_renewal_text,
+                    callback_data="user:auto_renewal"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("user_menu.back"),
+                    callback_data="user:settings"
+                )
+            ]
+        ]
+        
+        await callback.message.edit_text(
+            status_text + "\n\n" + _("settings.auto_renewal_description"),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+        )
+
+
+@router.callback_query(F.data == "user:auto_renewal:info")
+async def cb_auto_renewal_info(callback: CallbackQuery) -> None:
+    """Показывает подробную информацию об автопродлении."""
+    await callback.answer()
+    user_id = callback.from_user.id
+    user = BotUser.get_or_create(user_id, callback.from_user.username)
+    locale = user.get("language", "ru")
+    
+    i18n = get_i18n()
+    with i18n.use_locale(locale):
+        auto_renewal = BotUser.get_auto_renewal(user_id)
+        auto_renewal_text = _("settings.auto_renewal_on") if auto_renewal else _("settings.auto_renewal_off")
+        
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    text=auto_renewal_text,
+                    callback_data="user:auto_renewal"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("user_menu.back"),
+                    callback_data="user:settings"
+                )
+            ]
+        ]
+        
+        status_text = auto_renewal_text
+        await callback.message.edit_text(
+            _("settings.auto_renewal_full_info").format(status=status_text),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+        )
+
+
 @router.callback_query(F.data == "user:referral")
 async def cb_referral(callback: CallbackQuery) -> None:
     """Показывает реферальную информацию."""
@@ -1132,6 +1228,98 @@ async def cb_referral(callback: CallbackQuery) -> None:
         await callback.message.edit_text(
             text,
             reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard)
+        )
+
+
+@router.callback_query(F.data == "user:renew")
+async def cb_renew(callback: CallbackQuery) -> None:
+    """Обработчик 'Продлить доступ' - создает invoice для продления."""
+    await callback.answer()
+    user_id = callback.from_user.id
+    user = BotUser.get_or_create(user_id, callback.from_user.username)
+    locale = user.get("language", "ru")
+    
+    i18n = get_i18n()
+    with i18n.use_locale(locale):
+        # Используем стандартный период 1 месяц для продления
+        from src.config import get_settings
+        from src.services.payment_service import create_subscription_invoice
+        
+        settings = get_settings()
+        subscription_months = 1  # По умолчанию продлеваем на 1 месяц
+        
+        try:
+            invoice_link = await create_subscription_invoice(
+                bot=callback.message.bot,
+                user_id=user_id,
+                subscription_months=subscription_months,
+                promo_code=None
+            )
+            
+            buttons = [
+                [
+                    InlineKeyboardButton(
+                        text=_("payment.pay_button"),
+                        url=invoice_link
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text=_("user_menu.back"),
+                        callback_data="user:menu"
+                    )
+                ]
+            ]
+            
+            await callback.message.edit_text(
+                _("renewal.invoice_created"),
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+            )
+        except Exception as e:
+            logger.exception("Error creating renewal invoice")
+            await callback.message.edit_text(
+                _("renewal.error_creating_invoice"),
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(
+                        text=_("user_menu.back"),
+                        callback_data="user:menu"
+                    )
+                ]])
+            )
+
+
+@router.callback_query(F.data == "user:resume")
+async def cb_resume(callback: CallbackQuery) -> None:
+    """Обработчик 'Возобновить доступ' после окончания подписки."""
+    await callback.answer()
+    user_id = callback.from_user.id
+    user = BotUser.get_or_create(user_id, callback.from_user.username)
+    locale = user.get("language", "ru")
+    
+    i18n = get_i18n()
+    with i18n.use_locale(locale):
+        from src.config import get_settings
+        settings = get_settings()
+        
+        # Перенаправляем на покупку подписки
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    text=_("payment.subscription_1month").format(stars=settings.subscription_stars_1month),
+                    callback_data="buy:1"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_("user_menu.back"),
+                    callback_data="user:menu"
+                )
+            ]
+        ]
+        
+        await callback.message.edit_text(
+            _("renewal.resume_access"),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
         )
 
 
