@@ -685,7 +685,7 @@
     "invoice_created": "💳 Invoice created\n\nClick the button below to pay for the subscription via Telegram Stars.",
     "pay_button": "💳 Pay",
     "error_creating_invoice": "❌ Error creating invoice. Please try again later.",
-    "success": "✅ Payment processed successfully!\n\nYour subscription is active until: {expire_date}\n\nYou can now use SHFTVPN service.",
+    "success": "✅ Payment processed successfully!\n\nYour subscription is active until: {expire_date}\n\nYou can now use shftsecure service.",
     "already_processed": "ℹ️ This payment has already been processed.",
     "subscription_link": "🔗 Configuration link",
     "view_subscription": "📋 View my subscription",
