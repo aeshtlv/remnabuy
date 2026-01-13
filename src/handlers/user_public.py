@@ -1443,6 +1443,116 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
         subscription_months = int(parts[1])
         action = parts[2] if len(parts) > 2 else None
         
+        # Если последний элемент = "skip", пропускаем промокод и создаем платеж
+        if len(parts) >= 4 and parts[-1] == "skip":
+            payment_method = parts[2]  # stars, sbp или card
+            promo_code = None
+            
+            i18n = get_i18n()
+            with i18n.use_locale(locale):
+                if payment_method == "stars":
+                    from src.services.payment_service import create_subscription_invoice
+                    
+                    invoice_link = await create_subscription_invoice(
+                        bot=callback.message.bot,
+                        user_id=user_id,
+                        subscription_months=subscription_months,
+                        promo_code=promo_code
+                    )
+                    
+                    buttons = [
+                        [
+                            InlineKeyboardButton(
+                                text=_("payment.pay_button"),
+                                url=invoice_link
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                text=_("user_menu.back"),
+                                callback_data="user:buy"
+                            )
+                        ]
+                    ]
+                    
+                    await _edit_text_safe(
+                        callback.message,
+                        _("payment.invoice_created"),
+                        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+                    )
+                elif payment_method in ("sbp", "card"):
+                    from src.services.payment_service import create_yookassa_payment
+                    from src.keyboards.yookassa_payment import get_yookassa_payment_keyboard
+                    from aiogram.types import BufferedInputFile
+                    
+                    try:
+                        payment_data = await create_yookassa_payment(
+                            bot=callback.message.bot,
+                            user_id=user_id,
+                            subscription_months=subscription_months,
+                            promo_code=promo_code,
+                            payment_method=payment_method
+                        )
+                        
+                        payment_id = payment_data["payment_id"]
+                        confirmation_url = payment_data.get("confirmation_url")
+                        amount = payment_data.get("amount", 0)
+                        qr_code = payment_data.get("qr_code")
+                        
+                        # Отправляем QR-код, если есть (только для СБП)
+                        if qr_code and payment_method == "sbp":
+                            await callback.message.answer_photo(
+                                BufferedInputFile(qr_code, filename="qr_code.png"),
+                                caption=_("payment.yookassa.qr_code_sent")
+                            )
+                        
+                        # Отправляем сообщение с информацией о платеже
+                        text = _("payment.yookassa.payment_created").format(
+                            amount=f"{amount:.0f}",
+                            payment_id=payment_id[:16] + "..."
+                        )
+                        
+                        keyboard = get_yookassa_payment_keyboard(
+                            payment_id=payment_id,
+                            confirmation_url=confirmation_url
+                        )
+                        
+                        await _edit_text_safe(
+                            callback.message,
+                            text,
+                            reply_markup=keyboard,
+                            parse_mode="HTML"
+                        )
+                    except ValueError as e:
+                        # Ошибка конфигурации YooKassa
+                        logger.exception(f"YooKassa configuration error: {e}")
+                        error_text = _("payment.error_creating_invoice")
+                        if "not configured" in str(e).lower():
+                            error_text += "\n\n⚠️ YooKassa не настроен. Проверьте YOOKASSA_SHOP_ID и YOOKASSA_SECRET_KEY в .env"
+                        await _edit_text_safe(
+                            callback.message,
+                            error_text,
+                            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                                InlineKeyboardButton(
+                                    text=_("user_menu.back"),
+                                    callback_data="user:buy"
+                                )
+                            ]])
+                        )
+                    except Exception as e:
+                        logger.exception(f"Error creating YooKassa payment: {e}")
+                        await _edit_text_safe(
+                            callback.message,
+                            _("payment.error_creating_invoice"),
+                            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                                InlineKeyboardButton(
+                                    text=_("user_menu.back"),
+                                    callback_data="user:buy"
+                                )
+                            ]])
+                        )
+            return
+        
         # Если action = "payment_method", показываем выбор способа оплаты
         if action == "payment_method":
             i18n = get_i18n()
@@ -1566,117 +1676,6 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                     ),
                     reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
                 )
-            return
-        
-        # Если action = "skip", пропускаем промокод и создаем платеж
-        if action and action.endswith(":skip"):
-            parts_action = action.split(":")
-            payment_method = parts_action[0]  # stars, sbp или card
-            promo_code = None
-            
-            i18n = get_i18n()
-            with i18n.use_locale(locale):
-                if payment_method == "stars":
-                    from src.services.payment_service import create_subscription_invoice
-                    
-                    invoice_link = await create_subscription_invoice(
-                        bot=callback.message.bot,
-                        user_id=user_id,
-                        subscription_months=subscription_months,
-                        promo_code=promo_code
-                    )
-                    
-                    buttons = [
-                        [
-                            InlineKeyboardButton(
-                                text=_("payment.pay_button"),
-                                url=invoice_link
-                            )
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                text=_("user_menu.back"),
-                                callback_data="user:buy"
-                            )
-                        ]
-                    ]
-                    
-                    await _edit_text_safe(
-                        callback.message,
-                        _("payment.invoice_created"),
-                        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
-                    )
-                elif payment_method in ("sbp", "card"):
-                    from src.services.payment_service import create_yookassa_payment
-                    from src.keyboards.yookassa_payment import get_yookassa_payment_keyboard
-                    from aiogram.types import BufferedInputFile
-                    
-                    try:
-                        payment_data = await create_yookassa_payment(
-                            bot=callback.message.bot,
-                            user_id=user_id,
-                            subscription_months=subscription_months,
-                            promo_code=promo_code,
-                            payment_method=payment_method
-                        )
-                        
-                        payment_id = payment_data["payment_id"]
-                        confirmation_url = payment_data.get("confirmation_url")
-                        amount = payment_data.get("amount", 0)
-                        qr_code = payment_data.get("qr_code")
-                        
-                        # Отправляем QR-код, если есть (только для СБП)
-                        if qr_code and payment_method == "sbp":
-                            await callback.message.answer_photo(
-                                BufferedInputFile(qr_code, filename="qr_code.png"),
-                                caption=_("payment.yookassa.qr_code_sent")
-                            )
-                        
-                        # Отправляем сообщение с информацией о платеже
-                        text = _("payment.yookassa.payment_created").format(
-                            amount=f"{amount:.0f}",
-                            payment_id=payment_id[:16] + "..."
-                        )
-                        
-                        keyboard = get_yookassa_payment_keyboard(
-                            payment_id=payment_id,
-                            confirmation_url=confirmation_url
-                        )
-                        
-                        await _edit_text_safe(
-                            callback.message,
-                            text,
-                            reply_markup=keyboard,
-                            parse_mode="HTML"
-                        )
-                    except ValueError as e:
-                        # Ошибка конфигурации YooKassa
-                        logger.exception(f"YooKassa configuration error: {e}")
-                        error_text = _("payment.error_creating_invoice")
-                        if "not configured" in str(e).lower():
-                            error_text += "\n\n⚠️ YooKassa не настроен. Проверьте YOOKASSA_SHOP_ID и YOOKASSA_SECRET_KEY в .env"
-                        await _edit_text_safe(
-                            callback.message,
-                            error_text,
-                            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                                InlineKeyboardButton(
-                                    text=_("user_menu.back"),
-                                    callback_data="user:buy"
-                                )
-                            ]])
-                        )
-                    except Exception as e:
-                        logger.exception(f"Error creating YooKassa payment: {e}")
-                        await _edit_text_safe(
-                            callback.message,
-                            _("payment.error_creating_invoice"),
-                            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                                InlineKeyboardButton(
-                                    text=_("user_menu.back"),
-                                    callback_data="user:buy"
-                                )
-                            ]])
-                        )
             return
         
         # Если есть промокод в callback, применяем его
