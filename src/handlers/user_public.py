@@ -1434,8 +1434,11 @@ async def cb_buy(callback: CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("buy:"))
 async def cb_buy_subscription(callback: CallbackQuery) -> None:
     """Обрабатывает покупку подписки - показывает выбор способа оплаты или ввод промокода."""
-    logger.info(f"🔔 cb_buy_subscription CALLED: callback.data={callback.data}")
-    await callback.answer()
+    logger.info(f"🔔 cb_buy_subscription CALLED: callback.data={callback.data}, user_id={callback.from_user.id if callback.from_user else None}")
+    try:
+        await callback.answer()
+    except Exception as e:
+        logger.warning(f"Failed to answer callback: {e}")
     user_id = callback.from_user.id
     user = BotUser.get_or_create(user_id, callback.from_user.username)
     locale = user.get("language", "ru")
@@ -1776,14 +1779,15 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                 )
             return
     except ValueError as e:
-        logger.exception("Invalid subscription months")
+        logger.exception(f"❌ Invalid subscription months: callback.data={callback.data}, error={e}")
         i18n = get_i18n()
         with i18n.use_locale(locale):
-            await callback.message.edit_text(
-                _("payment.error_creating_invoice", locale=locale),
+            await _edit_text_safe(
+                callback.message,
+                _("payment.error_creating_invoice"),
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                     InlineKeyboardButton(
-                        text=_("user_menu.back", locale=locale),
+                        text=_("user_menu.back"),
                         callback_data="user:connect"
                     )
                 ]])
