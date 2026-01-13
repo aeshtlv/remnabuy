@@ -1444,7 +1444,7 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
         action = parts[2] if len(parts) > 2 else None
         
         # Логирование для отладки
-        logger.debug(f"cb_buy_subscription: callback.data={callback.data}, parts={parts}, action={action}, len(parts)={len(parts)}")
+        logger.info(f"cb_buy_subscription: callback.data={callback.data}, parts={parts}, action={action}, len(parts)={len(parts)}")
         
         # Если последний элемент = "skip", пропускаем промокод и создаем платеж
         if len(parts) >= 4 and parts[-1] == "skip":
@@ -1787,10 +1787,11 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                 ]])
             )
     except Exception as e:
-        logger.exception("Failed to create invoice")
+        logger.exception(f"Failed to process buy subscription callback: callback.data={callback.data}, error={e}")
         i18n = get_i18n()
         with i18n.use_locale(locale):
-            await callback.message.edit_text(
+            await _edit_text_safe(
+                callback.message,
                 _("payment.error_creating_invoice"),
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                     InlineKeyboardButton(
