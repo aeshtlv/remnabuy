@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     yookassa_shop_id: str | None = Field(default=None, alias="YOOKASSA_SHOP_ID")
     yookassa_secret_key: str | None = Field(default=None, alias="YOOKASSA_SECRET_KEY")
     yookassa_webhook_url: str | None = Field(default=None, alias="YOOKASSA_WEBHOOK_URL")
+    yookassa_webhook_port: int = Field(default=8080, alias="YOOKASSA_WEBHOOK_PORT")
     # Цены в рублях для YooKassa
     subscription_rub_1month: float = Field(
         default=100.0,

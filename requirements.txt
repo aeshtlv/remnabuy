@@ -6,3 +6,4 @@ pydantic-settings==2.4.0
 ujson==5.10.0
 yookassa==3.0.0
 qrcode[pil]==7.4.2
+aiohttp==3.9.1
