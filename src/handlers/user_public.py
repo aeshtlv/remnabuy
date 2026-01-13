@@ -1424,7 +1424,8 @@ async def cb_buy(callback: CallbackQuery) -> None:
             ]
         ]
         
-        await callback.message.edit_text(
+        await _edit_text_safe(
+            callback.message,
             _("payment.choose_subscription"),
             reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
         )
@@ -1433,6 +1434,7 @@ async def cb_buy(callback: CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("buy:"))
 async def cb_buy_subscription(callback: CallbackQuery) -> None:
     """Обрабатывает покупку подписки - показывает выбор способа оплаты или ввод промокода."""
+    logger.info(f"🔔 cb_buy_subscription CALLED: callback.data={callback.data}")
     await callback.answer()
     user_id = callback.from_user.id
     user = BotUser.get_or_create(user_id, callback.from_user.username)
@@ -1444,7 +1446,7 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
         action = parts[2] if len(parts) > 2 else None
         
         # Логирование для отладки
-        logger.info(f"cb_buy_subscription: callback.data={callback.data}, parts={parts}, action={action}, len(parts)={len(parts)}")
+        logger.info(f"📊 cb_buy_subscription: callback.data={callback.data}, parts={parts}, action={action}, len(parts)={len(parts)}")
         
         # Если последний элемент = "skip", пропускаем промокод и создаем платеж
         if len(parts) >= 4 and parts[-1] == "skip":
