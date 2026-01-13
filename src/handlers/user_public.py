@@ -959,7 +959,9 @@ async def handle_promo_code(message: Message) -> None:
     if not pending.startswith("promo_for_buy:"):
         return
     
-    subscription_months = int(pending.split(":")[1])
+    parts = pending.split(":")
+    subscription_months = int(parts[1])
+    payment_method = parts[2] if len(parts) > 2 else "stars"  # По умолчанию Stars для обратной совместимости
     del PENDING_INPUT[user_id]
     
     user = BotUser.get_or_create(user_id, message.from_user.username)
@@ -976,58 +978,107 @@ async def handle_promo_code(message: Message) -> None:
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                     InlineKeyboardButton(
                         text=_("user_menu.back"),
-                        callback_data=f"buy:{subscription_months}"
+                        callback_data=f"buy:{subscription_months}:{payment_method}"
                     )
                 ]])
             )
             return
         
-        # Промокод валиден - применяем его и создаем invoice
-        from src.services.payment_service import create_subscription_invoice
-        
+        # Промокод валиден - применяем его и создаем платеж
         try:
-            invoice_link = await create_subscription_invoice(
-                bot=message.bot,
-                user_id=user_id,
-                subscription_months=subscription_months,
-                promo_code=promo_code
-            )
-            
-            promo = PromoCode.get(promo_code)
-            promo_text = ""
-            if promo:
-                if promo.get("discount_percent"):
-                    promo_text = f"\n\n🎫 {_('user.promo_applied')}: {promo['discount_percent']}% {_('user.promo_discount')}"
-                elif promo.get("bonus_days"):
-                    promo_text = f"\n\n🎫 {_('user.promo_applied')}: +{promo['bonus_days']} {_('user.promo_bonus_days')}"
-            
-            buttons = [
-                [
-                    InlineKeyboardButton(
-                        text=_("payment.pay_button"),
-                        url=invoice_link
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        text=_("user_menu.back"),
-                        callback_data="user:connect"
-                    )
+            if payment_method == "stars":
+                from src.services.payment_service import create_subscription_invoice
+                
+                invoice_link = await create_subscription_invoice(
+                    bot=message.bot,
+                    user_id=user_id,
+                    subscription_months=subscription_months,
+                    promo_code=promo_code
+                )
+                
+                promo = PromoCode.get(promo_code)
+                promo_text = ""
+                if promo:
+                    if promo.get("discount_percent"):
+                        promo_text = f"\n\n🎫 {_('user.promo_applied')}: {promo['discount_percent']}% {_('user.promo_discount')}"
+                    elif promo.get("bonus_days"):
+                        promo_text = f"\n\n🎫 {_('user.promo_applied')}: +{promo['bonus_days']} {_('user.promo_bonus_days')}"
+                
+                buttons = [
+                    [
+                        InlineKeyboardButton(
+                            text=_("payment.pay_button"),
+                            url=invoice_link
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text=_("user_menu.back"),
+                            callback_data="user:connect"
+                        )
+                    ]
                 ]
-            ]
-            
-            await message.answer(
-                _("payment.invoice_created") + promo_text,
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
-            )
+                
+                await message.answer(
+                    _("payment.invoice_created") + promo_text,
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+                )
+            elif payment_method == "yookassa":
+                from src.services.payment_service import create_yookassa_payment
+                from src.keyboards.yookassa_payment import get_yookassa_payment_keyboard
+                from aiogram.types import BufferedInputFile
+                
+                payment_data = await create_yookassa_payment(
+                    bot=message.bot,
+                    user_id=user_id,
+                    subscription_months=subscription_months,
+                    promo_code=promo_code
+                )
+                
+                payment_id = payment_data["payment_id"]
+                confirmation_url = payment_data.get("confirmation_url")
+                amount = payment_data.get("amount", 0)
+                qr_code = payment_data.get("qr_code")
+                
+                # Отправляем QR-код, если есть
+                if qr_code:
+                    await message.answer_photo(
+                        BufferedInputFile(qr_code, filename="qr_code.png"),
+                        caption=_("payment.yookassa.qr_code_sent")
+                    )
+                
+                # Отправляем сообщение с информацией о платеже
+                promo = PromoCode.get(promo_code)
+                promo_text = ""
+                if promo:
+                    if promo.get("discount_percent"):
+                        promo_text = f"\n\n🎫 {_('user.promo_applied')}: {promo['discount_percent']}% {_('user.promo_discount')}"
+                    elif promo.get("bonus_days"):
+                        promo_text = f"\n\n🎫 {_('user.promo_applied')}: +{promo['bonus_days']} {_('user.promo_bonus_days')}"
+                
+                text = _("payment.yookassa.payment_created").format(
+                    amount=f"{amount:.0f}",
+                    payment_id=payment_id[:16] + "..."
+                ) + promo_text
+                
+                keyboard = get_yookassa_payment_keyboard(
+                    payment_id=payment_id,
+                    confirmation_url=confirmation_url
+                )
+                
+                await message.answer(
+                    text,
+                    reply_markup=keyboard,
+                    parse_mode="HTML"
+                )
         except Exception as e:
-            logger.exception("Error creating invoice with promo code")
+            logger.exception("Error creating payment with promo code")
             await message.answer(
                 _("payment.error_creating_invoice"),
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                     InlineKeyboardButton(
                         text=_("user_menu.back"),
-                        callback_data=f"buy:{subscription_months}"
+                        callback_data=f"buy:{subscription_months}:{payment_method}"
                     )
                 ]])
             )
@@ -1379,7 +1430,7 @@ async def cb_buy(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data.startswith("buy:"))
 async def cb_buy_subscription(callback: CallbackQuery) -> None:
-    """Обрабатывает покупку подписки - показывает ввод промокода или создает invoice."""
+    """Обрабатывает покупку подписки - показывает выбор способа оплаты или ввод промокода."""
     await callback.answer()
     user_id = callback.from_user.id
     user = BotUser.get_or_create(user_id, callback.from_user.username)
@@ -1390,7 +1441,377 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
         subscription_months = int(parts[1])
         action = parts[2] if len(parts) > 2 else None
         
-        # Если action = "skip", пропускаем промокод и сразу создаем invoice
+        # Если action = "payment_method", показываем выбор способа оплаты
+        if action == "payment_method":
+            i18n = get_i18n()
+            with i18n.use_locale(locale):
+                from src.config import get_settings
+                settings = get_settings()
+                
+                # Получаем цены
+                stars_prices = {
+                    1: settings.subscription_stars_1month,
+                    3: settings.subscription_stars_3months,
+                    6: settings.subscription_stars_6months,
+                    12: settings.subscription_stars_12months,
+                }
+                rub_prices = {
+                    1: settings.subscription_rub_1month,
+                    3: settings.subscription_rub_3months,
+                    6: settings.subscription_rub_6months,
+                    12: settings.subscription_rub_12months,
+                }
+                
+                stars = stars_prices.get(subscription_months, 0)
+                rub = rub_prices.get(subscription_months, 0)
+                
+                buttons = [
+                    [
+                        InlineKeyboardButton(
+                            text=_("payment.payment_method_stars") + f" ({stars} ⭐)",
+                            callback_data=f"buy:{subscription_months}:stars"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text=_("payment.payment_method_yookassa") + f" ({rub:.0f} ₽)",
+                            callback_data=f"buy:{subscription_months}:yookassa"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text=_("user_menu.back"),
+                            callback_data="user:buy"
+                        )
+                    ]
+                ]
+                
+                await callback.message.edit_text(
+                    _("payment.choose_payment_method"),
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+                )
+            return
+        
+        # Если action = "stars" или "yookassa", обрабатываем выбор способа оплаты
+        if action in ("stars", "yookassa"):
+            # Показываем экран ввода промокода с указанием способа оплаты
+            i18n = get_i18n()
+            with i18n.use_locale(locale):
+                from src.config import get_settings
+                settings = get_settings()
+                
+                # Получаем цену для выбранного периода и способа оплаты
+                if action == "stars":
+                    prices = {
+                        1: settings.subscription_stars_1month,
+                        3: settings.subscription_stars_3months,
+                        6: settings.subscription_stars_6months,
+                        12: settings.subscription_stars_12months,
+                    }
+                    price = prices.get(subscription_months, 0)
+                    price_text = f"{price} ⭐"
+                else:  # yookassa
+                    prices = {
+                        1: settings.subscription_rub_1month,
+                        3: settings.subscription_rub_3months,
+                        6: settings.subscription_rub_6months,
+                        12: settings.subscription_rub_12months,
+                    }
+                    price = prices.get(subscription_months, 0)
+                    price_text = f"{price:.0f} ₽"
+                
+                locale_map = {
+                    1: _("payment.subscription_1month").split(" (")[0],
+                    3: _("payment.subscription_3months").split(" (")[0],
+                    6: _("payment.subscription_6months").split(" (")[0],
+                    12: _("payment.subscription_12months").split(" (")[0],
+                }
+                months_text = locale_map.get(subscription_months, f"{subscription_months} месяцев")
+                
+                buttons = [
+                    [
+                        InlineKeyboardButton(
+                            text=_("payment.enter_promo_code"),
+                            callback_data=f"buy:{subscription_months}:{action}:promo"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text=_("payment.skip_promo_code"),
+                            callback_data=f"buy:{subscription_months}:{action}:skip"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text=_("user_menu.back"),
+                            callback_data=f"buy:{subscription_months}:payment_method"
+                        )
+                    ]
+                ]
+                
+                await callback.message.edit_text(
+                    _("payment.promo_code_prompt").format(
+                        months_text=months_text,
+                        stars=price_text
+                    ),
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+                )
+            return
+        
+        # Если action = "skip", пропускаем промокод и создаем платеж
+        if action and action.endswith(":skip"):
+            parts_action = action.split(":")
+            payment_method = parts_action[0]  # stars или yookassa
+            promo_code = None
+            
+            i18n = get_i18n()
+            with i18n.use_locale(locale):
+                if payment_method == "stars":
+                    from src.services.payment_service import create_subscription_invoice
+                    
+                    invoice_link = await create_subscription_invoice(
+                        bot=callback.message.bot,
+                        user_id=user_id,
+                        subscription_months=subscription_months,
+                        promo_code=promo_code
+                    )
+                    
+                    buttons = [
+                        [
+                            InlineKeyboardButton(
+                                text=_("payment.pay_button"),
+                                url=invoice_link
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                text=_("user_menu.back"),
+                                callback_data="user:buy"
+                            )
+                        ]
+                    ]
+                    
+                    await callback.message.edit_text(
+                        _("payment.invoice_created"),
+                        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+                    )
+                elif payment_method == "yookassa":
+                    from src.services.payment_service import create_yookassa_payment
+                    from src.keyboards.yookassa_payment import get_yookassa_payment_keyboard
+                    from aiogram.types import BufferedInputFile
+                    
+                    try:
+                        payment_data = await create_yookassa_payment(
+                            bot=callback.message.bot,
+                            user_id=user_id,
+                            subscription_months=subscription_months,
+                            promo_code=promo_code
+                        )
+                        
+                        payment_id = payment_data["payment_id"]
+                        confirmation_url = payment_data.get("confirmation_url")
+                        amount = payment_data.get("amount", 0)
+                        qr_code = payment_data.get("qr_code")
+                        
+                        # Отправляем QR-код, если есть
+                        if qr_code:
+                            await callback.message.answer_photo(
+                                BufferedInputFile(qr_code, filename="qr_code.png"),
+                                caption=_("payment.yookassa.qr_code_sent")
+                            )
+                        
+                        # Отправляем сообщение с информацией о платеже
+                        text = _("payment.yookassa.payment_created").format(
+                            amount=f"{amount:.0f}",
+                            payment_id=payment_id[:16] + "..."
+                        )
+                        
+                        keyboard = get_yookassa_payment_keyboard(
+                            payment_id=payment_id,
+                            confirmation_url=confirmation_url
+                        )
+                        
+                        await callback.message.edit_text(
+                            text,
+                            reply_markup=keyboard,
+                            parse_mode="HTML"
+                        )
+                    except Exception as e:
+                        logger.exception(f"Error creating YooKassa payment: {e}")
+                        await callback.message.edit_text(
+                            _("payment.error_creating_invoice"),
+                            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                                InlineKeyboardButton(
+                                    text=_("user_menu.back"),
+                                    callback_data="user:buy"
+                                )
+                            ]])
+                        )
+            return
+        
+        # Если есть промокод в callback, применяем его
+        if action and ":" in action and not action.endswith(":skip"):
+            parts_action = action.split(":")
+            if len(parts_action) >= 3 and parts_action[1] == "promo":
+                payment_method = parts_action[0]  # stars или yookassa
+                promo_code = parts_action[2].upper() if len(parts_action) > 2 else None
+                
+                i18n = get_i18n()
+                with i18n.use_locale(locale):
+                    if payment_method == "stars":
+                        from src.services.payment_service import create_subscription_invoice
+                        
+                        invoice_link = await create_subscription_invoice(
+                            bot=callback.message.bot,
+                            user_id=user_id,
+                            subscription_months=subscription_months,
+                            promo_code=promo_code
+                        )
+                        
+                        buttons = [
+                            [
+                                InlineKeyboardButton(
+                                    text=_("payment.pay_button"),
+                                    url=invoice_link
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    text=_("user_menu.back"),
+                                    callback_data="user:buy"
+                                )
+                            ]
+                        ]
+                        
+                        from src.database import PromoCode
+                        promo = PromoCode.get(promo_code)
+                        promo_text = ""
+                        if promo:
+                            if promo.get("discount_percent"):
+                                promo_text = f"\n\n🎫 {_('user.promo_applied')}: {promo['discount_percent']}% {_('user.promo_discount')}"
+                            elif promo.get("bonus_days"):
+                                promo_text = f"\n\n🎫 {_('user.promo_applied')}: +{promo['bonus_days']} {_('user.promo_bonus_days')}"
+                        
+                        await callback.message.edit_text(
+                            _("payment.invoice_created") + promo_text,
+                            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+                        )
+                    elif payment_method == "yookassa":
+                        from src.services.payment_service import create_yookassa_payment
+                        from src.keyboards.yookassa_payment import get_yookassa_payment_keyboard
+                        from aiogram.types import BufferedInputFile
+                        
+                        try:
+                            payment_data = await create_yookassa_payment(
+                                bot=callback.message.bot,
+                                user_id=user_id,
+                                subscription_months=subscription_months,
+                                promo_code=promo_code
+                            )
+                            
+                            payment_id = payment_data["payment_id"]
+                            confirmation_url = payment_data.get("confirmation_url")
+                            amount = payment_data.get("amount", 0)
+                            qr_code = payment_data.get("qr_code")
+                            
+                            # Отправляем QR-код, если есть
+                            if qr_code:
+                                await callback.message.answer_photo(
+                                    BufferedInputFile(qr_code, filename="qr_code.png"),
+                                    caption=_("payment.yookassa.qr_code_sent")
+                                )
+                            
+                            # Отправляем сообщение с информацией о платеже
+                            from src.database import PromoCode
+                            promo = PromoCode.get(promo_code)
+                            promo_text = ""
+                            if promo:
+                                if promo.get("discount_percent"):
+                                    promo_text = f"\n\n🎫 {_('user.promo_applied')}: {promo['discount_percent']}% {_('user.promo_discount')}"
+                                elif promo.get("bonus_days"):
+                                    promo_text = f"\n\n🎫 {_('user.promo_applied')}: +{promo['bonus_days']} {_('user.promo_bonus_days')}"
+                            
+                            text = _("payment.yookassa.payment_created").format(
+                                amount=f"{amount:.0f}",
+                                payment_id=payment_id[:16] + "..."
+                            ) + promo_text
+                            
+                            keyboard = get_yookassa_payment_keyboard(
+                                payment_id=payment_id,
+                                confirmation_url=confirmation_url
+                            )
+                            
+                            await callback.message.edit_text(
+                                text,
+                                reply_markup=keyboard,
+                                parse_mode="HTML"
+                            )
+                        except Exception as e:
+                            logger.exception(f"Error creating YooKassa payment: {e}")
+                            await callback.message.edit_text(
+                                _("payment.error_creating_invoice"),
+                                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                                    InlineKeyboardButton(
+                                        text=_("user_menu.back"),
+                                        callback_data="user:buy"
+                                    )
+                                ]])
+                            )
+                return
+        
+        # Если action отсутствует или не распознан, показываем выбор способа оплаты
+        if not action or action not in ("stars", "yookassa", "skip"):
+            # Показываем выбор способа оплаты
+            i18n = get_i18n()
+            with i18n.use_locale(locale):
+                from src.config import get_settings
+                settings = get_settings()
+                
+                # Получаем цены
+                stars_prices = {
+                    1: settings.subscription_stars_1month,
+                    3: settings.subscription_stars_3months,
+                    6: settings.subscription_stars_6months,
+                    12: settings.subscription_stars_12months,
+                }
+                rub_prices = {
+                    1: settings.subscription_rub_1month,
+                    3: settings.subscription_rub_3months,
+                    6: settings.subscription_rub_6months,
+                    12: settings.subscription_rub_12months,
+                }
+                
+                stars = stars_prices.get(subscription_months, 0)
+                rub = rub_prices.get(subscription_months, 0)
+                
+                buttons = [
+                    [
+                        InlineKeyboardButton(
+                            text=_("payment.payment_method_stars") + f" ({stars} ⭐)",
+                            callback_data=f"buy:{subscription_months}:stars"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text=_("payment.payment_method_yookassa") + f" ({rub:.0f} ₽)",
+                            callback_data=f"buy:{subscription_months}:yookassa"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text=_("user_menu.back"),
+                            callback_data="user:buy"
+                        )
+                    ]
+                ]
+                
+                await callback.message.edit_text(
+                    _("payment.choose_payment_method"),
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+                )
+            return
+        
+        # Старая логика для обратной совместимости (если action = "skip")
         if action == "skip":
             from src.services.payment_service import create_subscription_invoice
             
@@ -1422,7 +1843,7 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                     _("payment.invoice_created"),
                     reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
                 )
-        # Если есть промокод в callback, применяем его
+        # Если есть промокод в callback (старая логика)
         elif action and action != "skip":
             promo_code = action.upper()
             from src.services.payment_service import create_subscription_invoice
@@ -1463,14 +1884,15 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                     _("payment.invoice_created") + promo_text,
                     reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
                 )
+        # Обработка ввода промокода (старая логика для обратной совместимости)
         else:
-            # Показываем экран ввода промокода
+            # Показываем экран ввода промокода (только для Stars, для обратной совместимости)
             i18n = get_i18n()
             with i18n.use_locale(locale):
                 from src.config import get_settings
                 settings = get_settings()
                 
-                # Получаем цену для выбранного периода
+                # Получаем цену для выбранного периода (Stars)
                 prices = {
                     1: settings.subscription_stars_1month,
                     3: settings.subscription_stars_3months,

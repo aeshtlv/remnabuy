@@ -1,10 +1,11 @@
-"""Обработчики платежей через Telegram Stars."""
+"""Обработчики платежей через Telegram Stars и YooKassa."""
 from aiogram import F, Router
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, PreCheckoutQuery
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, PreCheckoutQuery
 from aiogram.utils.i18n import gettext as _
 
 from src.database import BotUser, Payment
-from src.services.payment_service import process_successful_payment
+from src.services.payment_service import process_successful_payment, process_yookassa_payment
+from src.services.yookassa_service import get_payment_status
 from src.utils.i18n import get_i18n
 from src.utils.logger import logger
 
@@ -149,4 +150,82 @@ async def process_successful_payment_message(message: Message) -> None:
                 _("payment.error_processing"),
                 parse_mode="HTML"
             )
+
+
+@router.callback_query(F.data.startswith("yookassa:check_status:"))
+async def check_yookassa_payment_status(callback: CallbackQuery) -> None:
+    """Проверяет статус платежа YooKassa."""
+    try:
+        payment_id = callback.data.split(":")[-1]
+        
+        user = BotUser.get_or_create(callback.from_user.id, callback.from_user.username)
+        locale = user.get("language", "ru")
+        
+        i18n = get_i18n()
+        with i18n.use_locale(locale):
+            # Получаем статус платежа из YooKassa
+            try:
+                status_data = await get_payment_status(payment_id)
+                payment_status = status_data.get("status")
+                paid = status_data.get("paid", False)
+                
+                # Находим платеж в БД
+                payment = Payment.get_by_yookassa_payment_id(payment_id)
+                
+                if not payment:
+                    await callback.answer(_("payment.error_processing"), show_alert=True)
+                    return
+                
+                if paid and payment_status == "succeeded":
+                    # Платеж успешен, обрабатываем его
+                    if payment["status"] != "completed":
+                        result = await process_yookassa_payment(payment_id, bot=callback.bot)
+                        
+                        if result.get("success"):
+                            if result.get("already_completed"):
+                                await callback.answer(_("payment.already_processed"), show_alert=True)
+                            else:
+                                subscription_url = result.get("subscription_url", "")
+                                expire_date = result.get("expire_date", "")
+                                
+                                text = _("payment.success").format(
+                                    expire_date=expire_date[:10] if expire_date else _("payment.unknown")
+                                )
+                                
+                                buttons = []
+                                if subscription_url:
+                                    buttons.append([InlineKeyboardButton(
+                                        text=_("user.get_config"),
+                                        url=subscription_url
+                                    )])
+                                buttons.append([InlineKeyboardButton(
+                                    text=_("user_menu.my_access"),
+                                    callback_data="user:my_access"
+                                )])
+                                
+                                await callback.message.edit_text(
+                                    text,
+                                    reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+                                    parse_mode="HTML"
+                                )
+                                await callback.answer()
+                                return
+                    else:
+                        await callback.answer(_("payment.already_processed"), show_alert=True)
+                        return
+                elif payment_status == "pending":
+                    await callback.answer(_("payment.yookassa.pending"), show_alert=True)
+                    return
+                elif payment_status == "canceled":
+                    await callback.answer(_("payment.yookassa.canceled"), show_alert=True)
+                    return
+                else:
+                    await callback.answer(_("payment.yookassa.waiting"), show_alert=True)
+                    return
+            except Exception as e:
+                logger.exception(f"Error checking YooKassa payment status: {e}")
+                await callback.answer(_("payment.error_processing"), show_alert=True)
+    except Exception as e:
+        logger.exception("Error in check_yookassa_payment_status")
+        await callback.answer(_("payment.error_processing"), show_alert=True)
 

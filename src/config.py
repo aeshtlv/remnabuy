@@ -55,6 +55,31 @@ class Settings(BaseSettings):
         alias="SUBSCRIPTION_STARS_12MONTHS",
         description="Stars за 12 месяцев (дефолт: 800, если не указано в .env)"
     )
+    # Настройки для YooKassa платежей
+    yookassa_shop_id: str | None = Field(default=None, alias="YOOKASSA_SHOP_ID")
+    yookassa_secret_key: str | None = Field(default=None, alias="YOOKASSA_SECRET_KEY")
+    yookassa_webhook_url: str | None = Field(default=None, alias="YOOKASSA_WEBHOOK_URL")
+    # Цены в рублях для YooKassa
+    subscription_rub_1month: float = Field(
+        default=100.0,
+        alias="SUBSCRIPTION_RUB_1MONTH",
+        description="Рубли за 1 месяц (дефолт: 100.0)"
+    )
+    subscription_rub_3months: float = Field(
+        default=250.0,
+        alias="SUBSCRIPTION_RUB_3MONTHS",
+        description="Рубли за 3 месяца (дефолт: 250.0)"
+    )
+    subscription_rub_6months: float = Field(
+        default=450.0,
+        alias="SUBSCRIPTION_RUB_6MONTHS",
+        description="Рубли за 6 месяцев (дефолт: 450.0)"
+    )
+    subscription_rub_12months: float = Field(
+        default=800.0,
+        alias="SUBSCRIPTION_RUB_12MONTHS",
+        description="Рубли за 12 месяцев (дефолт: 800.0)"
+    )
     trial_days: int = Field(3, alias="TRIAL_DAYS")  # Дней пробной подписки
     referral_bonus_days: int = Field(3, alias="REFERRAL_BONUS_DAYS")  # Бонусных дней за реферала
     # Дефолтные сквады для новых пользователей

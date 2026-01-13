@@ -96,22 +96,41 @@ def init_database():
             )
         """)
         
-        # Таблица платежей (Telegram Stars)
+        # Таблица платежей (Telegram Stars и YooKassa)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS payments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,
                 stars INTEGER,
+                amount_rub REAL,
                 status TEXT DEFAULT 'pending',
                 remnawave_user_uuid TEXT,
                 invoice_payload TEXT,
                 subscription_days INTEGER,
                 promo_code TEXT,
+                payment_method TEXT DEFAULT 'stars',
+                yookassa_payment_id TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 completed_at TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES bot_users(telegram_id)
             )
         """)
+        
+        # Миграция: добавляем поля для YooKassa, если их нет
+        try:
+            cursor.execute("ALTER TABLE payments ADD COLUMN amount_rub REAL")
+        except sqlite3.OperationalError:
+            pass  # Колонка уже существует
+        
+        try:
+            cursor.execute("ALTER TABLE payments ADD COLUMN payment_method TEXT DEFAULT 'stars'")
+        except sqlite3.OperationalError:
+            pass  # Колонка уже существует
+        
+        try:
+            cursor.execute("ALTER TABLE payments ADD COLUMN yookassa_payment_id TEXT")
+        except sqlite3.OperationalError:
+            pass  # Колонка уже существует
 
 
 class BotUser:
@@ -363,19 +382,24 @@ class Payment:
     @staticmethod
     def create(
         user_id: int, 
-        stars: int, 
-        invoice_payload: str,
-        subscription_days: int,
+        stars: int | None = None,
+        amount_rub: float | None = None,
+        invoice_payload: str | None = None,
+        subscription_days: int = 0,
         promo_code: Optional[str] = None,
-        remnawave_user_uuid: Optional[str] = None
+        remnawave_user_uuid: Optional[str] = None,
+        payment_method: str = "stars",
+        yookassa_payment_id: Optional[str] = None
     ) -> int:
         """Создает запись о платеже."""
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO payments (user_id, stars, remnawave_user_uuid, invoice_payload, subscription_days, promo_code)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (user_id, stars, remnawave_user_uuid, invoice_payload, subscription_days, promo_code))
+                INSERT INTO payments (user_id, stars, amount_rub, remnawave_user_uuid, invoice_payload, 
+                                     subscription_days, promo_code, payment_method, yookassa_payment_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (user_id, stars, amount_rub, remnawave_user_uuid, invoice_payload, 
+                  subscription_days, promo_code, payment_method, yookassa_payment_id))
             return cursor.lastrowid
     
     @staticmethod
@@ -386,6 +410,25 @@ class Payment:
             cursor.execute("SELECT * FROM payments WHERE invoice_payload = ?", (invoice_payload,))
             row = cursor.fetchone()
             return dict(row) if row else None
+    
+    @staticmethod
+    def get_by_yookassa_payment_id(yookassa_payment_id: str) -> Optional[dict]:
+        """Получает платеж по YooKassa payment ID."""
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM payments WHERE yookassa_payment_id = ?", (yookassa_payment_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+    
+    @staticmethod
+    def update_yookassa_payment_id(payment_id: int, yookassa_payment_id: str):
+        """Обновляет YooKassa payment ID для платежа."""
+        with get_db_connection() as conn:
+            conn.execute("""
+                UPDATE payments 
+                SET yookassa_payment_id = ?
+                WHERE id = ?
+            """, (yookassa_payment_id, payment_id))
     
     @staticmethod
     def update_status(payment_id: int, status: str, remnawave_uuid: Optional[str] = None):
