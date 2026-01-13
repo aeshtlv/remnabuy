@@ -54,16 +54,30 @@ async def create_payment(
         **(metadata or {})
     }
     
+    # Определяем способ оплаты из метаданных
+    payment_method = metadata.get("payment_method", "sbp") if metadata else "sbp"
+    
+    # Настраиваем confirmation в зависимости от способа оплаты
+    if payment_method == "sbp":
+        # Для СБП используем QR-код
+        confirmation = {
+            "type": "qr",
+            "return_url": return_url or settings.yookassa_webhook_url or "https://t.me/your_bot"
+        }
+    else:
+        # Для банковской карты используем redirect
+        confirmation = {
+            "type": "redirect",
+            "return_url": return_url or settings.yookassa_webhook_url or "https://t.me/your_bot"
+        }
+    
     # Создаем платеж
     payment_data = {
         "amount": {
             "value": f"{amount:.2f}",
             "currency": "RUB"
         },
-        "confirmation": {
-            "type": "qr",
-            "return_url": return_url or settings.yookassa_webhook_url or "https://t.me/your_bot"
-        },
+        "confirmation": confirmation,
         "capture": True,
         "description": description,
         "metadata": payment_metadata

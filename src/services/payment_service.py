@@ -117,7 +117,8 @@ async def create_yookassa_payment(
     bot: Bot,
     user_id: int,
     subscription_months: int,
-    promo_code: str | None = None
+    promo_code: str | None = None,
+    payment_method: str = "sbp"
 ) -> dict:
     """Создает платеж через YooKassa.
     
@@ -126,6 +127,7 @@ async def create_yookassa_payment(
         user_id: ID пользователя Telegram
         subscription_months: Количество месяцев подписки (1, 3, 6, 12)
         promo_code: Промокод для скидки (опционально)
+        payment_method: Способ оплаты - "sbp" (СБП) или "card" (банковская карта)
     
     Returns:
         Словарь с данными платежа (payment_id, qr_code, confirmation_url, amount)
@@ -177,7 +179,7 @@ async def create_yookassa_payment(
             description=description,
             user_id=user_id,
             subscription_months=subscription_months,
-            metadata={"promo_code": promo_code} if promo_code else None
+            metadata={"promo_code": promo_code, "payment_method": payment_method} if promo_code else {"payment_method": payment_method}
         )
         
         payment_id = payment_data["id"]

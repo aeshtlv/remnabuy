@@ -1024,7 +1024,7 @@ async def handle_promo_code(message: Message) -> None:
                     _("payment.invoice_created") + promo_text,
                     reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
                 )
-            elif payment_method == "yookassa":
+            elif payment_method in ("sbp", "card"):
                 from src.services.payment_service import create_yookassa_payment
                 from src.keyboards.yookassa_payment import get_yookassa_payment_keyboard
                 from aiogram.types import BufferedInputFile
@@ -1033,7 +1033,8 @@ async def handle_promo_code(message: Message) -> None:
                     bot=message.bot,
                     user_id=user_id,
                     subscription_months=subscription_months,
-                    promo_code=promo_code
+                    promo_code=promo_code,
+                    payment_method=payment_method
                 )
                 
                 payment_id = payment_data["payment_id"]
@@ -1041,8 +1042,8 @@ async def handle_promo_code(message: Message) -> None:
                 amount = payment_data.get("amount", 0)
                 qr_code = payment_data.get("qr_code")
                 
-                # Отправляем QR-код, если есть
-                if qr_code:
+                # Отправляем QR-код, если есть (только для СБП)
+                if qr_code and payment_method == "sbp":
                     await message.answer_photo(
                         BufferedInputFile(qr_code, filename="qr_code.png"),
                         caption=_("payment.yookassa.qr_code_sent")
@@ -1475,8 +1476,14 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                     ],
                     [
                         InlineKeyboardButton(
-                            text=_("payment.payment_method_yookassa") + f" ({rub:.0f} ₽)",
-                            callback_data=f"buy:{subscription_months}:yookassa"
+                            text=_("payment.payment_method_sbp") + f" ({rub:.0f} ₽)",
+                            callback_data=f"buy:{subscription_months}:sbp"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text=_("payment.payment_method_card") + f" ({rub:.0f} ₽)",
+                            callback_data=f"buy:{subscription_months}:card"
                         )
                     ],
                     [
@@ -1487,14 +1494,15 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                     ]
                 ]
                 
-                await callback.message.edit_text(
+                await _edit_text_safe(
+                    callback.message,
                     _("payment.choose_payment_method"),
                     reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
                 )
             return
         
-        # Если action = "stars" или "yookassa", обрабатываем выбор способа оплаты
-        if action in ("stars", "yookassa"):
+        # Если action = "stars", "sbp" или "card", обрабатываем выбор способа оплаты
+        if action in ("stars", "sbp", "card"):
             # Показываем экран ввода промокода с указанием способа оплаты
             i18n = get_i18n()
             with i18n.use_locale(locale):
@@ -1511,7 +1519,7 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                     }
                     price = prices.get(subscription_months, 0)
                     price_text = f"{price} ⭐"
-                else:  # yookassa
+                else:  # sbp или card (оба через YooKassa)
                     prices = {
                         1: settings.subscription_rub_1month,
                         3: settings.subscription_rub_3months,
@@ -1563,7 +1571,7 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
         # Если action = "skip", пропускаем промокод и создаем платеж
         if action and action.endswith(":skip"):
             parts_action = action.split(":")
-            payment_method = parts_action[0]  # stars или yookassa
+            payment_method = parts_action[0]  # stars, sbp или card
             promo_code = None
             
             i18n = get_i18n()
@@ -1593,11 +1601,12 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                         ]
                     ]
                     
-                    await callback.message.edit_text(
+                    await _edit_text_safe(
+                        callback.message,
                         _("payment.invoice_created"),
                         reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
                     )
-                elif payment_method == "yookassa":
+                elif payment_method in ("sbp", "card"):
                     from src.services.payment_service import create_yookassa_payment
                     from src.keyboards.yookassa_payment import get_yookassa_payment_keyboard
                     from aiogram.types import BufferedInputFile
@@ -1607,7 +1616,8 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                             bot=callback.message.bot,
                             user_id=user_id,
                             subscription_months=subscription_months,
-                            promo_code=promo_code
+                            promo_code=promo_code,
+                            payment_method=payment_method
                         )
                         
                         payment_id = payment_data["payment_id"]
@@ -1615,8 +1625,8 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                         amount = payment_data.get("amount", 0)
                         qr_code = payment_data.get("qr_code")
                         
-                        # Отправляем QR-код, если есть
-                        if qr_code:
+                        # Отправляем QR-код, если есть (только для СБП)
+                        if qr_code and payment_method == "sbp":
                             await callback.message.answer_photo(
                                 BufferedInputFile(qr_code, filename="qr_code.png"),
                                 caption=_("payment.yookassa.qr_code_sent")
@@ -1673,7 +1683,7 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
         if action and ":" in action and not action.endswith(":skip"):
             parts_action = action.split(":")
             if len(parts_action) >= 3 and parts_action[1] == "promo":
-                payment_method = parts_action[0]  # stars или yookassa
+                payment_method = parts_action[0]  # stars, sbp или card
                 promo_code = parts_action[2].upper() if len(parts_action) > 2 else None
                 
                 i18n = get_i18n()
@@ -1712,11 +1722,12 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                             elif promo.get("bonus_days"):
                                 promo_text = f"\n\n🎫 {_('user.promo_applied')}: +{promo['bonus_days']} {_('user.promo_bonus_days')}"
                         
-                        await callback.message.edit_text(
+                        await _edit_text_safe(
+                            callback.message,
                             _("payment.invoice_created") + promo_text,
                             reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
                         )
-                    elif payment_method == "yookassa":
+                    elif payment_method in ("sbp", "card"):
                         from src.services.payment_service import create_yookassa_payment
                         from src.keyboards.yookassa_payment import get_yookassa_payment_keyboard
                         from aiogram.types import BufferedInputFile
@@ -1734,8 +1745,8 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                             amount = payment_data.get("amount", 0)
                             qr_code = payment_data.get("qr_code")
                             
-                            # Отправляем QR-код, если есть
-                            if qr_code:
+                            # Отправляем QR-код, если есть (только для СБП)
+                            if qr_code and payment_method == "sbp":
                                 await callback.message.answer_photo(
                                     BufferedInputFile(qr_code, filename="qr_code.png"),
                                     caption=_("payment.yookassa.qr_code_sent")
@@ -1831,8 +1842,14 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                     ],
                     [
                         InlineKeyboardButton(
-                            text=_("payment.payment_method_yookassa") + f" ({rub:.0f} ₽)",
-                            callback_data=f"buy:{subscription_months}:yookassa"
+                            text=_("payment.payment_method_sbp") + f" ({rub:.0f} ₽)",
+                            callback_data=f"buy:{subscription_months}:sbp"
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text=_("payment.payment_method_card") + f" ({rub:.0f} ₽)",
+                            callback_data=f"buy:{subscription_months}:card"
                         )
                     ],
                     [
@@ -1843,7 +1860,8 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                     ]
                 ]
                 
-                await callback.message.edit_text(
+                await _edit_text_safe(
+                    callback.message,
                     _("payment.choose_payment_method"),
                     reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
                 )
