@@ -1553,6 +1553,37 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                         )
             return
         
+        # Если есть промокод в callback, запрашиваем ввод промокода
+        # Формат: buy:subscription_months:payment_method:promo
+        if len(parts) >= 4 and parts[-1] == "promo":
+            payment_method = parts[2]  # stars, sbp или card
+            
+            # Сохраняем состояние ожидания промокода
+            from src.handlers.state import PENDING_INPUT
+            PENDING_INPUT[user_id] = f"promo_for_buy:{subscription_months}:{payment_method}"
+            
+            i18n = get_i18n()
+            with i18n.use_locale(locale):
+                locale_map = {
+                    1: _("payment.subscription_1month").split(" (")[0],
+                    3: _("payment.subscription_3months").split(" (")[0],
+                    6: _("payment.subscription_6months").split(" (")[0],
+                    12: _("payment.subscription_12months").split(" (")[0],
+                }
+                months_text = locale_map.get(subscription_months, f"{subscription_months} месяцев")
+                
+                await _edit_text_safe(
+                    callback.message,
+                    _("payment.enter_promo_code_text").format(months_text=months_text),
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                        InlineKeyboardButton(
+                            text=_("actions.cancel"),
+                            callback_data=f"buy:{subscription_months}:{payment_method}"
+                        )
+                    ]])
+                )
+            return
+        
         # Если action = "payment_method", показываем выбор способа оплаты
         if action == "payment_method":
             i18n = get_i18n()
@@ -1611,8 +1642,8 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                 )
             return
         
-        # Если action = "stars", "sbp" или "card", обрабатываем выбор способа оплаты
-        if action in ("stars", "sbp", "card"):
+        # Если action = "stars", "sbp" или "card" (и нет дополнительных параметров), обрабатываем выбор способа оплаты
+        if action in ("stars", "sbp", "card") and len(parts) == 3:
             # Показываем экран ввода промокода с указанием способа оплаты
             i18n = get_i18n()
             with i18n.use_locale(locale):
@@ -1675,37 +1706,6 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                         stars=price_text
                     ),
                     reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
-                )
-            return
-        
-        # Если есть промокод в callback, запрашиваем ввод промокода
-        # Формат: buy:subscription_months:payment_method:promo
-        if len(parts) >= 4 and parts[-1] == "promo":
-            payment_method = parts[2]  # stars, sbp или card
-            
-            # Сохраняем состояние ожидания промокода
-            from src.handlers.state import PENDING_INPUT
-            PENDING_INPUT[user_id] = f"promo_for_buy:{subscription_months}:{payment_method}"
-            
-            i18n = get_i18n()
-            with i18n.use_locale(locale):
-                locale_map = {
-                    1: _("payment.subscription_1month").split(" (")[0],
-                    3: _("payment.subscription_3months").split(" (")[0],
-                    6: _("payment.subscription_6months").split(" (")[0],
-                    12: _("payment.subscription_12months").split(" (")[0],
-                }
-                months_text = locale_map.get(subscription_months, f"{subscription_months} месяцев")
-                
-                await _edit_text_safe(
-                    callback.message,
-                    _("payment.enter_promo_code_text").format(months_text=months_text),
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                        InlineKeyboardButton(
-                            text=_("actions.cancel"),
-                            callback_data=f"buy:{subscription_months}:{payment_method}"
-                        )
-                    ]])
                 )
             return
         
