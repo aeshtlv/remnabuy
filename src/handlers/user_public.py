@@ -9,6 +9,7 @@ from aiogram.utils.i18n import gettext as _
 
 from src.database import BotUser, PromoCode, Referral, Payment
 from src.services.api_client import NotFoundError, api_client
+from src.handlers.common import _edit_text_safe
 from src.utils.i18n import get_i18n
 from src.utils.logger import logger
 
@@ -1549,7 +1550,8 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                     ]
                 ]
                 
-                await callback.message.edit_text(
+                await _edit_text_safe(
+                    callback.message,
                     _("payment.promo_code_prompt").format(
                         months_text=months_text,
                         stars=price_text
@@ -1631,14 +1633,32 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                             confirmation_url=confirmation_url
                         )
                         
-                        await callback.message.edit_text(
+                        await _edit_text_safe(
+                            callback.message,
                             text,
                             reply_markup=keyboard,
                             parse_mode="HTML"
                         )
+                    except ValueError as e:
+                        # Ошибка конфигурации YooKassa
+                        logger.exception(f"YooKassa configuration error: {e}")
+                        error_text = _("payment.error_creating_invoice")
+                        if "not configured" in str(e).lower():
+                            error_text += "\n\n⚠️ YooKassa не настроен. Проверьте YOOKASSA_SHOP_ID и YOOKASSA_SECRET_KEY в .env"
+                        await _edit_text_safe(
+                            callback.message,
+                            error_text,
+                            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                                InlineKeyboardButton(
+                                    text=_("user_menu.back"),
+                                    callback_data="user:buy"
+                                )
+                            ]])
+                        )
                     except Exception as e:
                         logger.exception(f"Error creating YooKassa payment: {e}")
-                        await callback.message.edit_text(
+                        await _edit_text_safe(
+                            callback.message,
                             _("payment.error_creating_invoice"),
                             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                                 InlineKeyboardButton(
@@ -1741,14 +1761,32 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                                 confirmation_url=confirmation_url
                             )
                             
-                            await callback.message.edit_text(
+                            await _edit_text_safe(
+                                callback.message,
                                 text,
                                 reply_markup=keyboard,
                                 parse_mode="HTML"
                             )
+                        except ValueError as e:
+                            # Ошибка конфигурации YooKassa
+                            logger.exception(f"YooKassa configuration error: {e}")
+                            error_text = _("payment.error_creating_invoice")
+                            if "not configured" in str(e).lower():
+                                error_text += "\n\n⚠️ YooKassa не настроен. Проверьте YOOKASSA_SHOP_ID и YOOKASSA_SECRET_KEY в .env"
+                            await _edit_text_safe(
+                                callback.message,
+                                error_text,
+                                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                                    InlineKeyboardButton(
+                                        text=_("user_menu.back"),
+                                        callback_data="user:buy"
+                                    )
+                                ]])
+                            )
                         except Exception as e:
                             logger.exception(f"Error creating YooKassa payment: {e}")
-                            await callback.message.edit_text(
+                            await _edit_text_safe(
+                                callback.message,
                                 _("payment.error_creating_invoice"),
                                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                                     InlineKeyboardButton(
