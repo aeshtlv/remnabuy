@@ -1443,10 +1443,14 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
         subscription_months = int(parts[1])
         action = parts[2] if len(parts) > 2 else None
         
+        # Логирование для отладки
+        logger.debug(f"cb_buy_subscription: callback.data={callback.data}, parts={parts}, action={action}, len(parts)={len(parts)}")
+        
         # Если последний элемент = "skip", пропускаем промокод и создаем платеж
         if len(parts) >= 4 and parts[-1] == "skip":
             payment_method = parts[2]  # stars, sbp или card
             promo_code = None
+            logger.info(f"Processing skip payment: subscription_months={subscription_months}, payment_method={payment_method}")
             
             i18n = get_i18n()
             with i18n.use_locale(locale):
@@ -1557,6 +1561,7 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
         # Формат: buy:subscription_months:payment_method:promo
         if len(parts) >= 4 and parts[-1] == "promo":
             payment_method = parts[2]  # stars, sbp или card
+            logger.info(f"Processing promo input: subscription_months={subscription_months}, payment_method={payment_method}")
             
             # Сохраняем состояние ожидания промокода
             from src.handlers.state import PENDING_INPUT
@@ -1644,6 +1649,7 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
         
         # Если action = "stars", "sbp" или "card" (и нет дополнительных параметров), обрабатываем выбор способа оплаты
         if action in ("stars", "sbp", "card") and len(parts) == 3:
+            logger.info(f"Showing promo code prompt: subscription_months={subscription_months}, payment_method={action}")
             # Показываем экран ввода промокода с указанием способа оплаты
             i18n = get_i18n()
             with i18n.use_locale(locale):
