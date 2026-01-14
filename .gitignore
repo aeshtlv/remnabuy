@@ -1,14 +1,41 @@
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
 .pytest_cache/
 .venv/
+venv/
+ENV/
+env/
+
+# Environment variables
 .env
-dist/
-.DS_Store
-*.log
-*.pyc
-*.pyo
+.env.local
+.env.*.local
+
+# IDE
 .idea/
 .vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Database
 *.db
 *.sqlite
 *.sqlite3
+
+# Build
+dist/
+build/
+*.egg-info/
