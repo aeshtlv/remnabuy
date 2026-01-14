@@ -33,8 +33,6 @@ class Settings(BaseSettings):
     notifications_chat_id: int | None = Field(default=None, alias="NOTIFICATIONS_CHAT_ID")
     notifications_topic_id: int | None = Field(default=None, alias="NOTIFICATIONS_TOPIC_ID")
     # Настройки для Telegram Stars платежей
-    # ВАЖНО: Если переменные не найдены в .env, будут использованы дефолтные значения ниже
-    # Проверьте логи при запуске - там будет видно, откуда берутся значения
     subscription_stars_1month: int = Field(
         default=100, 
         alias="SUBSCRIPTION_STARS_1MONTH",
@@ -247,6 +245,11 @@ def get_settings(reload: bool = False) -> Settings:
     logger.info("  3 months: %s stars (env: %s)", settings.subscription_stars_3months, os.getenv("SUBSCRIPTION_STARS_3MONTHS", "NOT SET"))
     logger.info("  6 months: %s stars (env: %s)", settings.subscription_stars_6months, os.getenv("SUBSCRIPTION_STARS_6MONTHS", "NOT SET"))
     logger.info("  12 months: %s stars (env: %s)", settings.subscription_stars_12months, os.getenv("SUBSCRIPTION_STARS_12MONTHS", "NOT SET"))
+    logger.info("Subscription prices (RUB):")
+    logger.info("  1 month:  %s RUB (env: %s)", settings.subscription_rub_1month, os.getenv("SUBSCRIPTION_RUB_1MONTH", "NOT SET"))
+    logger.info("  3 months: %s RUB (env: %s)", settings.subscription_rub_3months, os.getenv("SUBSCRIPTION_RUB_3MONTHS", "NOT SET"))
+    logger.info("  6 months: %s RUB (env: %s)", settings.subscription_rub_6months, os.getenv("SUBSCRIPTION_RUB_6MONTHS", "NOT SET"))
+    logger.info("  12 months: %s RUB (env: %s)", settings.subscription_rub_12months, os.getenv("SUBSCRIPTION_RUB_12MONTHS", "NOT SET"))
     
     # Логируем сквады
     logger.info("Squads configuration:")

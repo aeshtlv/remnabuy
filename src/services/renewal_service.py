@@ -10,7 +10,6 @@ from aiogram.utils.i18n import gettext as _
 from src.config import get_settings
 from src.database import BotUser
 from src.services.api_client import NotFoundError, api_client
-from src.services.payment_service import create_subscription_invoice
 from src.utils.i18n import get_i18n
 from src.utils.logger import logger
 

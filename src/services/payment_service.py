@@ -35,10 +35,6 @@ async def create_subscription_invoice(
         6: settings.subscription_stars_6months,
         12: settings.subscription_stars_12months,
     }
-    logger.info(
-        "Stars price table: 1m=%s,3m=%s,6m=%s,12m=%s (requested %s months)",
-        stars_prices[1], stars_prices[3], stars_prices[6], stars_prices[12], subscription_months
-    )
     
     if subscription_months not in stars_prices:
         raise ValueError(f"Invalid subscription months: {subscription_months}")
@@ -59,7 +55,6 @@ async def create_subscription_invoice(
     subscription_days = subscription_months * 30
     
     # Создаем короткий payload для invoice (Telegram ограничивает длину)
-    # Используем только необходимые данные
     invoice_payload = f"{user_id}:{subscription_months}:{stars}:{promo_code or ''}"
     
     # Создаем запись о платеже
@@ -81,7 +76,6 @@ async def create_subscription_invoice(
     
     description_ru, description_en = locale_map[subscription_months]
     description = f"Подписка Remnawave {description_ru} | Remnawave subscription {description_en}"
-    # LabeledPrice.label имеет строгий лимит длины у Telegram — держим коротким
     price_label = f"Remnawave {subscription_months}m"
     
     # Создаем invoice link
@@ -96,7 +90,6 @@ async def create_subscription_invoice(
         )
         
         logger.info(f"Invoice created for user {user_id}: {payment_id}, {stars} stars")
-        # create_invoice_link возвращает строку URL
         return str(invoice_link)
     except Exception as e:
         logger.exception(
@@ -108,7 +101,6 @@ async def create_subscription_invoice(
             subscription_months,
             promo_code,
         )
-        # Обновляем статус платежа на failed
         Payment.update_status(payment_id, "failed")
         raise
 
@@ -216,12 +208,13 @@ async def process_successful_payment(
     total_amount: int,
     bot: Bot | None = None
 ) -> dict:
-    """Обрабатывает успешный платеж и создает пользователя в Remnawave.
+    """Обрабатывает успешный платеж через Telegram Stars и создает пользователя в Remnawave.
     
     Args:
         user_id: ID пользователя Telegram
         invoice_payload: Payload из invoice
         total_amount: Общая сумма в Stars
+        bot: Экземпляр бота (опционально)
     
     Returns:
         Словарь с результатом (success, user_uuid, subscription_url, error)
@@ -277,7 +270,6 @@ async def process_successful_payment(
         from src.services.api_client import api_client
         settings = get_settings()
         
-        # Проверяем, есть ли уже пользователь
         remnawave_uuid = bot_user.get("remnawave_user_uuid")
         
         if remnawave_uuid:
@@ -285,7 +277,7 @@ async def process_successful_payment(
             try:
                 user_data = await api_client.get_user_by_uuid(remnawave_uuid)
                 current_expire = user_data.get("response", {}).get("expireAt")
-                # Убедимся, что нужные сквады применены
+                
                 try:
                     desired_external = settings.default_external_squad_uuid
                     desired_internal = settings.default_internal_squads or None
@@ -295,15 +287,10 @@ async def process_successful_payment(
                             externalSquadUuid=desired_external,
                             activeInternalSquads=desired_internal,
                         )
-                        logger.info(
-                            "Applied squads to existing user %s: external=%s internal=%s",
-                            remnawave_uuid, desired_external, desired_internal
-                        )
                 except Exception as squad_exc:
                     logger.warning("Failed to apply squads to existing user %s: %s", remnawave_uuid, squad_exc)
                 
                 if current_expire:
-                    # Продлеваем подписку от текущей даты
                     current_dt = datetime.fromisoformat(current_expire.replace("Z", "+00:00"))
                     if current_dt > datetime.now(current_dt.tzinfo):
                         expire_date = (current_dt + timedelta(days=subscription_days)).replace(microsecond=0).isoformat() + "Z"
@@ -312,19 +299,7 @@ async def process_successful_payment(
                 user_uuid = remnawave_uuid
             except Exception as e:
                 logger.error(f"Failed to update user {remnawave_uuid}: {e}")
-                # Создаем нового пользователя
-                # Подготавливаем сквады
                 internal_squads = settings.default_internal_squads if settings.default_internal_squads else None
-                
-                # Логируем, что передаем при создании пользователя
-                logger.info(
-                    "Creating payment user for %d: external_squad=%s, internal_squads=%s (type=%s, len=%s)",
-                    user_id,
-                    settings.default_external_squad_uuid,
-                    internal_squads,
-                    type(internal_squads).__name__ if internal_squads else "None",
-                    len(internal_squads) if internal_squads else 0
-                )
                 
                 user_data = await api_client.create_user(
                     username=username,
@@ -338,7 +313,6 @@ async def process_successful_payment(
                 BotUser.set_remnawave_uuid(user_id, user_uuid)
         else:
             # Создаем нового пользователя
-            # Подготавливаем сквады
             internal_squads = settings.default_internal_squads if settings.default_internal_squads else None
             
             user_data = await api_client.create_user(
@@ -351,7 +325,7 @@ async def process_successful_payment(
             user_info = user_data.get("response", user_data)
             user_uuid = user_info.get("uuid")
             BotUser.set_remnawave_uuid(user_id, user_uuid)
-            # На всякий случай повторно применим сквады через update (если create их проигнорировал)
+            
             if settings.default_external_squad_uuid or internal_squads:
                 try:
                     update_payload = {}
@@ -362,14 +336,6 @@ async def process_successful_payment(
                     
                     if update_payload:
                         await api_client.update_user(user_uuid, **update_payload)
-                        logger.info(
-                            "Applied squads on payment user %s: external=%s, internal=%s (type=%s, len=%s)",
-                            user_uuid,
-                            settings.default_external_squad_uuid,
-                            internal_squads,
-                            type(internal_squads).__name__ if internal_squads else "None",
-                            len(internal_squads) if internal_squads else 0
-                        )
                 except Exception as squad_exc:
                     logger.warning("Failed to apply squads on payment user %s: %s", user_uuid, squad_exc)
         
@@ -391,30 +357,9 @@ async def process_successful_payment(
         Payment.update_status(payment["id"], "completed", user_uuid)
         
         # Применяем промокод (если есть)
-        promo_discount = 0
-        promo_bonus_days = 0
         if promo_code:
             from src.database import PromoCode
-            promo = PromoCode.get(promo_code)
-            if promo:
-                promo_discount = promo.get("discount_percent", 0) or 0
-                promo_bonus_days = promo.get("bonus_days", 0) or 0
             PromoCode.use(promo_code, user_id)
-            
-            # Отправляем уведомление об использовании промокода
-            if bot:
-                from src.services.notification_service import notify_promo_usage
-                try:
-                    await notify_promo_usage(
-                        bot,
-                        user_id,
-                        username,
-                        promo_code,
-                        promo_discount,
-                        promo_bonus_days
-                    )
-                except Exception as notif_exc:
-                    logger.warning("Failed to send promo usage notification: %s", notif_exc)
         
         # Начисляем бонус рефереру (если есть)
         from src.services.referral_service import grant_referral_bonus
@@ -422,7 +367,6 @@ async def process_successful_payment(
         try:
             referral_data = await grant_referral_bonus(user_id)
             if referral_data and bot:
-                # Отправляем уведомление о реферальном бонусе
                 from src.services.notification_service import notify_referral_bonus
                 await notify_referral_bonus(
                     bot,
@@ -518,7 +462,7 @@ async def process_yookassa_payment(
         # Вычисляем дату истечения
         expire_date = (datetime.now() + timedelta(days=subscription_days)).replace(microsecond=0).isoformat() + "Z"
         
-        # Создаем пользователя в Remnawave (код аналогичен process_successful_payment)
+        # Создаем пользователя в Remnawave
         from src.services.api_client import api_client
         settings = get_settings()
         

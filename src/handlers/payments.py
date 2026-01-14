@@ -62,7 +62,7 @@ async def process_pre_checkout(pre_checkout_query: PreCheckoutQuery) -> None:
 
 @router.message(F.content_type == "successful_payment")
 async def process_successful_payment_message(message: Message) -> None:
-    """Обрабатывает успешный платеж."""
+    """Обрабатывает успешный платеж через Telegram Stars."""
     user_id = message.from_user.id
     payment_info = message.successful_payment
     
@@ -112,7 +112,6 @@ async def process_successful_payment_message(message: Message) -> None:
                             text=_("user.get_config"),
                             url=subscription_url
                         )])
-                    # После оплаты автоматически ведем в "Мой доступ"
                     buttons.append([InlineKeyboardButton(
                         text=_("user_menu.my_access"),
                         callback_data="user:my_access"
@@ -127,8 +126,6 @@ async def process_successful_payment_message(message: Message) -> None:
             else:
                 error = result.get("error", _("payment.error_processing"))
                 text = _("payment.error").format(error=error)
-                
-                # Уведомляем пользователя, что нужно обратиться в поддержку
                 text += f"\n\n{_('payment.contact_support')}"
                 
                 buttons = [[
