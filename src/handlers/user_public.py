@@ -1434,28 +1434,36 @@ async def cb_buy(callback: CallbackQuery) -> None:
 @router.callback_query(F.data.startswith("buy:"))
 async def cb_buy_subscription(callback: CallbackQuery) -> None:
     """Обрабатывает покупку подписки - показывает выбор способа оплаты или ввод промокода."""
-    logger.info(f"🔔 cb_buy_subscription CALLED: callback.data={callback.data}, user_id={callback.from_user.id if callback.from_user else None}")
-    try:
-        await callback.answer()
-    except Exception as e:
-        logger.warning(f"Failed to answer callback: {e}")
-    user_id = callback.from_user.id
-    user = BotUser.get_or_create(user_id, callback.from_user.username)
-    locale = user.get("language", "ru")
+    callback_data = callback.data
+    user_id = callback.from_user.id if callback.from_user else None
+    logger.info(f"🔔 cb_buy_subscription CALLED: callback.data={callback_data}, user_id={user_id}")
     
     try:
-        parts = callback.data.split(":")
+        await callback.answer()
+        logger.debug(f"✅ Callback answered successfully for {callback_data}")
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to answer callback: {e}")
+    
+    try:
+        user = BotUser.get_or_create(user_id, callback.from_user.username if callback.from_user else None)
+        locale = user.get("language", "ru")
+        
+        parts = callback_data.split(":")
+        if len(parts) < 2:
+            logger.error(f"❌ Invalid callback_data format: {callback_data}, parts={parts}")
+            return
+        
         subscription_months = int(parts[1])
         action = parts[2] if len(parts) > 2 else None
         
         # Логирование для отладки
-        logger.info(f"📊 cb_buy_subscription: callback.data={callback.data}, parts={parts}, action={action}, len(parts)={len(parts)}")
+        logger.info(f"📊 Parsed callback: data={callback_data}, parts={parts}, action={action}, len(parts)={len(parts)}, last_part={parts[-1] if len(parts) > 0 else 'N/A'}")
         
         # Если последний элемент = "skip", пропускаем промокод и создаем платеж
         if len(parts) >= 4 and parts[-1] == "skip":
             payment_method = parts[2]  # stars, sbp или card
             promo_code = None
-            logger.info(f"Processing skip payment: subscription_months={subscription_months}, payment_method={payment_method}")
+            logger.info(f"✅ Processing skip payment: subscription_months={subscription_months}, payment_method={payment_method}, parts={parts}")
             
             i18n = get_i18n()
             with i18n.use_locale(locale):
@@ -1484,11 +1492,19 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                         ]
                     ]
                     
-                    await _edit_text_safe(
-                        callback.message,
-                        _("payment.invoice_created"),
-                        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
-                    )
+                    try:
+                        await _edit_text_safe(
+                            callback.message,
+                            _("payment.invoice_created"),
+                            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+                        )
+                        logger.info(f"✅ Successfully created invoice for skip payment: subscription_months={subscription_months}, payment_method={payment_method}")
+                    except Exception as e:
+                        logger.exception(f"❌ Error editing message for skip payment: {e}")
+                        await callback.message.answer(
+                            _("payment.invoice_created"),
+                            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
+                        )
                 elif payment_method in ("sbp", "card"):
                     from src.services.payment_service import create_yookassa_payment
                     from src.keyboards.yookassa_payment import get_yookassa_payment_keyboard
@@ -1566,7 +1582,7 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
         # Формат: buy:subscription_months:payment_method:promo
         if len(parts) >= 4 and parts[-1] == "promo":
             payment_method = parts[2]  # stars, sbp или card
-            logger.info(f"Processing promo input: subscription_months={subscription_months}, payment_method={payment_method}")
+            logger.info(f"✅ Processing promo input: subscription_months={subscription_months}, payment_method={payment_method}")
             
             # Сохраняем состояние ожидания промокода
             from src.handlers.state import PENDING_INPUT
@@ -1582,16 +1598,29 @@ async def cb_buy_subscription(callback: CallbackQuery) -> None:
                 }
                 months_text = locale_map.get(subscription_months, f"{subscription_months} месяцев")
                 
-                await _edit_text_safe(
-                    callback.message,
-                    _("payment.enter_promo_code_text").format(months_text=months_text),
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                        InlineKeyboardButton(
-                            text=_("actions.cancel"),
-                            callback_data=f"buy:{subscription_months}:{payment_method}"
-                        )
-                    ]])
-                )
+                try:
+                    await _edit_text_safe(
+                        callback.message,
+                        _("payment.enter_promo_code_text").format(months_text=months_text),
+                        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                            InlineKeyboardButton(
+                                text=_("actions.cancel"),
+                                callback_data=f"buy:{subscription_months}:{payment_method}"
+                            )
+                        ]])
+                    )
+                    logger.info(f"✅ Successfully requested promo code input for subscription_months={subscription_months}, payment_method={payment_method}")
+                except Exception as e:
+                    logger.exception(f"❌ Error requesting promo code input: {e}")
+                    await callback.message.answer(
+                        _("payment.error_creating_invoice"),
+                        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                            InlineKeyboardButton(
+                                text=_("user_menu.back"),
+                                callback_data=f"buy:{subscription_months}:{payment_method}"
+                            )
+                        ]])
+                    )
             return
         
         # Если action = "payment_method", показываем выбор способа оплаты
