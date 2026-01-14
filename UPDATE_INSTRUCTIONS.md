@@ -99,7 +99,6 @@ nano .env
 ```env
 YOOKASSA_SHOP_ID=ваш_shop_id
 YOOKASSA_SECRET_KEY=ваш_secret_key
-YOOKASSA_WEBHOOK_PORT=8080
 SUBSCRIPTION_RUB_1MONTH=100.0
 SUBSCRIPTION_RUB_3MONTHS=250.0
 SUBSCRIPTION_RUB_6MONTHS=450.0
@@ -129,10 +128,5 @@ docker-compose logs -f bot
 ✅ Database initialized
 🔄 Renewal checker started
 Starting bot
-```
-
-Если настроены YooKassa credentials:
-```
-🌐 YooKassa webhook server started on port 8080
 ```
 

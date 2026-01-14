@@ -125,20 +125,10 @@ async def main() -> None:
     renewal_task = asyncio.create_task(start_renewal_checker(bot, interval_hours=6))
     logger.info("🔄 Renewal checker started (interval: 6 hours)")
 
-    # Запускаем HTTP сервер для webhook'ов YooKassa (если настроен)
-    webhook_server = None
-    if settings.yookassa_shop_id and settings.yookassa_secret_key:
-        from src.services.webhook_server import YooKassaWebhookServer
-        webhook_server = YooKassaWebhookServer(bot, port=settings.yookassa_webhook_port)
-        await webhook_server.start()
-
     logger.info("Starting bot")
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
-        # Останавливаем webhook сервер
-        if webhook_server:
-            await webhook_server.stop()
         # Отменяем фоновую задачу при остановке
         renewal_task.cancel()
         try:

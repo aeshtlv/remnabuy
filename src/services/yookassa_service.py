@@ -62,13 +62,13 @@ async def create_payment(
         # Для СБП используем QR-код
         confirmation = {
             "type": "qr",
-            "return_url": return_url or settings.yookassa_webhook_url or "https://t.me/your_bot"
+            "return_url": return_url or "https://t.me/your_bot"
         }
     else:
         # Для банковской карты используем redirect
         confirmation = {
             "type": "redirect",
-            "return_url": return_url or settings.yookassa_webhook_url or "https://t.me/your_bot"
+            "return_url": return_url or "https://t.me/your_bot"
         }
     
     # Создаем платеж
